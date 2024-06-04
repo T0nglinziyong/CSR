@@ -193,29 +193,35 @@ class BiEncoderForClassification(PreTrainedModel):
         self.post_init()
 
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
-            input_ids_2=None,
-            attention_mask_2=None,
-            token_type_ids_2=None,
-            position_ids_2=None,
-            head_mask_2=None,
-            inputs_embeds_2=None,
-            labels=None, 
-            **kwargs,
-            ):
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        input_ids_2=None,
+        attention_mask_2=None,
+        token_type_ids_2=None,
+        position_ids_2=None,
+        head_mask_2=None,
+        inputs_embeds_2=None,
+        input_ids_3=None,
+        attention_mask_3=None,
+        token_type_ids_3=None,
+        position_ids_3=None,
+        head_mask_3=None,
+        inputs_embeds_3=None,
+        labels=None,
+        **kwargs,
+        ):
         bsz = input_ids.shape[0]
-        input_ids = concat_features(input_ids, input_ids_2)
-        attention_mask = concat_features(attention_mask, attention_mask_2)
-        token_type_ids = concat_features(token_type_ids, token_type_ids_2)
-        position_ids = concat_features(position_ids, position_ids_2)
-        head_mask = concat_features(head_mask, head_mask_2)
-        inputs_embeds = concat_features(inputs_embeds, inputs_embeds_2)
+        input_ids = self.concat_features(input_ids, input_ids_2, input_ids_3)
+        attention_mask = self.concat_features(attention_mask, attention_mask_2, attention_mask_3)
+        token_type_ids = self.concat_features(token_type_ids, token_type_ids_2, token_type_ids_3)
+        position_ids = self.concat_features(position_ids, position_ids_2, position_ids_3)
+        head_mask = self.concat_features(head_mask, head_mask_2, head_mask_3)
+        inputs_embeds = self.concat_features(inputs_embeds, inputs_embeds_2, inputs_embeds_3)
         outputs = self.backbone(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -248,6 +254,15 @@ class BiEncoderForClassification(PreTrainedModel):
             loss=loss,
             logits=logits,
         )
+    
+    def concat_features(self, feature_1=None, feature_2=None, feature_c=None):
+        if feature_1 is None or feature_2 is None:
+            return None
+        if feature_c is not None:
+            feature_1 = torch.cat([feature_1, feature_c], dim=1)
+            feature_2 = torch.cat([feature_2, feature_c], dim=1)
+        return torch.cat([feature_1, feature_2], dim=0)
+    
 
 class TriEncoderForClassification(PreTrainedModel):
     def __init__(self, config):

@@ -1,0 +1,219 @@
+import torch
+from torch import nn
+import torch.nn.functional as F
+from typing import Union, Tuple, Optional, List
+from transformers.models.bert.modeling_bert import BertSelfAttention
+from .utils import *
+import math
+import time
+
+
+class MultiHeadLinear(nn.Module):
+    def __init__(self, hidden_size, num_heads, num_experts, dropout=0.1):
+        super(MultiHeadLinear, self).__init__()
+        ffd_head_size = hidden_size // num_heads
+        self.hidden_size = hidden_size
+        self.nheads = num_heads
+        self.num_experts = num_experts
+        self.ffd_head_size = ffd_head_size
+
+        self.Whead = nn.Linear(hidden_size, hidden_size)
+        self.Wmerge = nn.Linear(hidden_size, hidden_size)
+        self.Router = nn.Linear(ffd_head_size, 1)
+
+
+        self.NExperts = nn.Linear(ffd_head_size, num_experts * ffd_head_size)
+
+    def transpose_for_head(self, features):
+        batch_size, seq_length, _ = features.shape
+        new_shape = (batch_size, seq_length * self.nheads, self.ffd_head_size)
+
+        return features.view(*new_shape)
+    
+    def transpose_for_expert(self, features):
+        batch_size, seq_length, _ = features.shape
+        new_shape = (batch_size, seq_length, self.num_experts, self.ffd_head_size)
+
+        return features.view(*new_shape)
+    
+    def transpose_for_merge(self, features):
+        batch_size, seq_length, _ = features.shape
+        new_shape = (batch_size, seq_length // self.nheads, self.hidden_size)
+
+        return features.view(*new_shape)
+    
+    def forward(self, features, condition=None):
+        batch_size, seq_length, hidden_size = features.shape
+        shape_1 = (batch_size, seq_length, self.nheads, hidden_size // self.nheads)
+        shape_2 = (batch_size, )
+        
+        # 将最后两个维度交换，以便后续计算
+        output_tensor = output_tensor.permute(0, 2, 1, 3)
+        
+        features = self.Whead(features).view(shape_1).permute(0, 2, 1, 3)
+        features = self.transpose_for_expert(self.NExperts(features))
+
+        head_prob = F.softmax(self.Router(features).squeeze(), dim=-1)
+        features = torch.einsum("bled, ble ->bld", [features, head_prob])
+
+        features = self.transpose_for_merge(features)
+
+        features = self.Wmerge(features)
+        return features
+    
+class RouterBase(nn.Module):
+    def __init__(self, hidden_size, temperature=1, k=10, p=None, theta=0.3, theta0=4, T=20, beta=0.7, k2=None, p2=None, 
+                 nheads=1, use_condition=False, use_position=False, sent_transform=False, return_head_dim=False) -> None:
+        super(RouterBase, self).__init__()
+        self.hidden_size = hidden_size
+        self.use_condition = use_condition
+        self.use_position = use_position
+        self.max_position_embeddings = 128
+        self.return_head_dim = return_head_dim
+        self.nheads = nheads
+        self.attention_head_size = hidden_size // nheads
+        self.temperature = temperature
+
+        self.W = nn.Linear(hidden_size, hidden_size) if use_condition else nn.Linear(hidden_size, 1)
+        self.Wsent = nn.Linear(hidden_size, hidden_size) if sent_transform else nn.Identity()
+        self.distance_embedding = nn.Embedding(self.max_position_embeddings * 2 - 1,
+                                               self.nheads
+                                                #self.attention_head_size
+                                                )
+        self.relu = nn.ReLU()
+        self.k = k  # select hard k 
+        self.p = p # select soft percent
+
+        self.k2 = k2 if k2 is not None else k # select soft k
+        self.p2 = p2# select soft percent
+
+        self.theta = theta
+        self.theta0 = theta0
+        self.beta = beta
+        self.T = T
+    
+    def transpose_for_scores(self, input_tensor):
+        # 将输入张量进行维度变换，以适应注意力权重计算
+        batch_size, seq_length, hidden_size = input_tensor.shape
+        new_shape = (batch_size, seq_length, self.nheads, hidden_size // self.nheads)
+        
+        # 对张量进行维度变换
+        output_tensor = input_tensor.view(*new_shape)
+        
+        # 将最后两个维度交换，以便后续计算
+        output_tensor = output_tensor.permute(0, 2, 1, 3)
+        
+        return output_tensor
+
+    def F(self, score):
+        bsz, nheads, clen, slen = score.shape
+        device = score.device
+        if self.k2 == 1 and self.theta == 0:
+            return torch.softmax(score, dim=-1)
+        if self.p2 is not None:
+            k = torch.sum(torch.isfinite(score), dim=-1).unsqueeze(-1) * self.p2
+        else:
+            k = self.k2
+
+        a = torch.zeros((bsz, nheads, clen, 1), device=device)
+        b = torch.zeros((bsz, nheads, clen, slen), device=device)
+        pilot_a = a
+        theta = self.theta0
+
+        for _ in range(self.T):
+            s = torch.sum(torch.exp((score + b) / theta), dim=-1, keepdim=True)
+            pilot_a = theta * torch.log(k / (s + 1e-20))
+            #if torch.any(torch.isinf(pilot_a)) or torch.any(torch.isnan(pilot_a)):
+            #    break
+            a = pilot_a
+            b = - self.relu(score + a)
+
+            theta = max(self.beta * theta, self.theta)
+        
+        gamma = torch.exp((score + a + b) / self.theta)
+
+        return gamma
+
+    
+    def get_topk(self, gamma):
+        bsz, nheads, clen, slen = gamma.shape
+        if self.p == 1:
+            return torch.eye(slen, device=gamma.device).unsqueeze(0).repeat(bsz, 1, 1), gamma
+        
+        gamma = torch.mean(gamma, dim=1)
+        gamma = torch.mean(gamma, dim=1)
+        
+        result_tensor = torch.zeros_like(gamma)
+        _, top_indices = torch.topk(gamma, self.k, dim=1)
+        result_tensor.scatter_(1, top_indices, 1)
+
+        indices = torch.nonzero(result_tensor, as_tuple=False)
+        indices = indices[:, 1].reshape(bsz, self.k, 1)
+
+        transposed_matrix = torch.arange(slen, device=indices.device).unsqueeze(0).unsqueeze(1) == indices
+
+        return transposed_matrix.to(torch.float), result_tensor * gamma
+
+    
+    def forward(self, X_norm, mask=None, condition=None):
+        if self.use_condition is None or (self.use_condition and condition is None):
+            count = torch.sum(mask, dim=-1, keepdim=True)
+            score = (torch.ones_like(mask) / count).unsqueeze(1).unsqueeze(2)
+        elif self.use_condition:
+            condition = self.transpose_for_scores(self.W(condition))
+            X_norm = self.transpose_for_scores(self.Wsent(X_norm))
+
+            score = torch.matmul(condition, X_norm.transpose(-1, -2))
+            
+            if self.use_position:
+                slength = X_norm.shape[2]
+                position_ids_l = torch.arange(slength, dtype=torch.long, device=X_norm.device).view(-1, 1)
+                position_ids_r = torch.arange(slength, dtype=torch.long, device=X_norm.device).view(1, -1)
+                distance = position_ids_l - position_ids_r
+
+                positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
+                positional_embedding = positional_embedding.to(dtype=X_norm.dtype)  # fp16 compatibility
+
+                relative_position_scores = positional_embedding.permute(2, 0, 1).unsqueeze(0)
+                #relative_position_scores = torch.tanh(relative_position_scores) + 1
+
+                #relative_position_scores = torch.einsum("bhld,lrd->bhlr", X_norm, positional_embedding)
+                score = score + relative_position_scores
+            #score = score / math.sqrt(self.attention_head_size)
+            #s = torch.einsum("bhcd, bhsd -> bhcs", [condition, X_norm]) / math.sqrt(self.attention_head_size)
+            score = score / math.sqrt(self.attention_head_size)
+        else:
+            score = self.transpose_for_scores(self.W(X_norm)).permute(0, 1, 3, 2) # 0.0046269893646240234
+
+        score *= self.temperature
+        if mask is not None:
+            score = score.masked_fill(mask.unsqueeze(1).unsqueeze(2)==0, float('-inf')) # 0.00022482872009277344
+        gamma = self.F(score) # 0.018700361251831055
+        P, m = self.get_topk(gamma) # 0.011761903762817383
+
+        return P, m
+    
+
+
+class SoftmaxScoreRouter(RouterBase):
+    def __init__(self, hidden_size, temperature=1, nheads=1, use_condition=False, use_position=False, sent_transform=False, return_head_dim=False) -> None:
+        super(SoftmaxScoreRouter, self).__init__(hidden_size=hidden_size, temperature=temperature, p=1, theta=0, k2=1,
+                 nheads=nheads, use_condition=use_condition, use_position=use_position, sent_transform=sent_transform, return_head_dim=return_head_dim)
+
+
+class HyperNetwork(nn.Module):
+    def __init__(self, input_size, hidden_size):
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.input_size = input_size
+        self.W1 = nn.Linear(input_size, hidden_size * input_size)
+        self.W2 = nn.Linear(input_size, hidden_size * input_size)
+
+
+    def forward(self, sentence, condition):
+        query1 = self.W1(condition).reshape(-1, self.hidden_size, self.input_size)
+        query2 = self.W2(condition).reshape(-1, self.hidden_size, self.input_size)
+        Wc = torch.einsum("bkh, bkH -> bhH", [query1, query2])
+
+        output = torch.einsum("bhH, bh -> bH", [Wc, sentence])
+        return output
