@@ -47,10 +47,9 @@ class CustomizedEncoder(PreTrainedModel):
         self.encoder = backbone.encoder.layer
         self.pooler = None
         for i in range(config.routing_start, config.routing_end):
-            self.encoder[i].add_module("Router", SoftmaxScoreRouter(hidden_size=config.hidden_size, temperature=config.temperature, nheads=1, 
-                                                        use_condition=True, use_position=False, sent_transform=True, return_head_dim=True))
-            self.encoder[i].add_module("Router2", SoftmaxScoreRouter(hidden_size=config.hidden_size, temperature=config.temperature, nheads=1, 
-                                                        use_condition=True, use_position=False, sent_transform=True, return_head_dim=True))
+            self.encoder[i].add_module("Router", ScorerV1(hidden_size=config.hidden_size, temperature=config.temperature, nheads=1, 
+                                                        use_condition=True, use_position=False, sent_transform=True))
+            self.encoder[i].add_module("RouterV2", ScorerV2(hidden_size=config.hidden_size))
             
             self.encoder[i].add_module("LightAttn", BertSelfAttention(hidden_size, nheads=8, dropout=0.1))
             self.encoder[i].add_module("Adapter", nn.Sequential(nn.Linear(hidden_size, hidden_size), nn.Dropout(config.hidden_dropout_prob)))
@@ -224,7 +223,6 @@ class CustomizedEncoder(PreTrainedModel):
         conditional_output = self.router_forward(layer, hidden_states, org_mask) * m #* key_ids.unsqueeze(-1)
 
         attention_output = attention.output(self_outputs[0], hidden_states + conditional_output)# linear + dropout + layernorm
-        
         outputs = (attention_output,) + self_outputs[2:]  + (token_score,) # add attentions if we output them
         return outputs
     
@@ -420,20 +418,17 @@ class CustomizedEncoder(PreTrainedModel):
         
         
         if router_type == 0:
-            #mask[:, split_pos:] = 0
-            P, m = layer.Router(features, org_mask, condition=features[:, split_pos:split_pos+1])
-            m = m.squeeze()
+            mask = org_mask
+            mask[:, split_pos:] = 0
+            word_count = torch.sum(mask, dim=-1, keepdim=True)
+            m = layer.Router(features, mask, condition=features[:, split_pos:split_pos+1])
             s = m * word_count
-            
 
         elif router_type == 1:
-            features_1, features_2 = torch.split(features, split_pos, dim=1)
-            masks_1, masks_2 = torch.split(org_mask, split_pos, dim=1)
-
-            P, m = layer.Router(features_1, masks_1, condition=features[:, split_pos:split_pos+1])
-            P2, m2 = layer.Router(features_2, masks_2, condition=features[:, 0:1])
-
-            m = torch.cat([m.squeeze(), m2.squeeze()], dim=1)
+            mask = org_mask
+            mask[:, split_pos:] = 0
+            word_count = torch.sum(mask, dim=-1, keepdim=True)
+            m = layer.RouterV2(features, mask, condition=features[:, split_pos:split_pos+1])
             s = m * word_count
 
         elif router_type == 2:

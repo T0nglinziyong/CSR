@@ -32,7 +32,7 @@ def send_post_request(email, predictions, filename):
         print("See email: \"C-STS Evaluation Results for %s\"" % filename)
 
 
-def main(email, predictions_file, name):
+def main(email, predictions_file, name=None):
     predictions_file = Path(predictions_file).resolve(strict=True)
     if name is None:
         name = predictions_file.as_posix()

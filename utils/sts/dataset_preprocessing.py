@@ -109,7 +109,7 @@ def get_add_supervision_function_(
                     "condition_key":data[condition_keyword],
                     "sentence1_key":data[sentence1_keyword],
                     "sentence2_key":data[sentence2_keyword],
-                    "key_ids_1": get_idx(data[sentence1_keyword], tokenizer.convert_ids_to_tokens(example["input_ids"])),
+                    "key_ids": get_idx(data[sentence1_keyword], tokenizer.convert_ids_to_tokens(example["input_ids"])),
                     "key_ids_2": get_idx(data[sentence2_keyword], tokenizer.convert_ids_to_tokens(example["input_ids_2"])),
                     "key_ids_3": get_idx(data[condition_keyword], tokenizer.convert_ids_to_tokens(example["input_ids_3"])),
                 }

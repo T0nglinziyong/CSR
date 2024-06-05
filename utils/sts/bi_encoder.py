@@ -4,6 +4,7 @@ from torch import nn
 from torch.nn.functional import cosine_similarity
 from .utils import *
 from .my_encoder import CustomizedEncoder
+from .routing import MultiHeadLinear
 
 from transformers.activations import ACT2FN
 from transformers.modeling_outputs import (
@@ -31,6 +32,7 @@ class BiEncoderForClassification_(PreTrainedModel):
             use_auth_token=True if config.use_auth_token else None,
             add_pooling_layer=False,
         ).base_model'''
+
         self.margin = config.margin
         self.layer_score = config.routing_end - 1 if config.layer_score is None else config.layer_score
 
@@ -45,7 +47,10 @@ class BiEncoderForClassification_(PreTrainedModel):
                 )
         else:
             self.transform = None
+
         self.pooler = Pooler(config.pooler_type)
+
+        self.multihead_ffd = None # MultiHeadLinear(hidden_size=config.hidden_size, num_heads=8, num_experts=8)
         if config.pooler_type in {'avg_first_last', 'avg_top2'}:
             self.output_hidden_states = True
         else:
@@ -112,9 +117,14 @@ class BiEncoderForClassification_(PreTrainedModel):
             )
         
         features = self.pooler(attention_mask, outputs)
+
         if self.transform is not None:
             features = self.transform(features)
+        if self.multihead_ffd is not None:
+            features = self.multihead_ffd(features)
+
         features_1, features_2 = torch.split(features, bsz, dim=0)  # [sentence1, condtion], [sentence2, condition]
+
         loss = None
         if self.config.objective in {'triplet', 'triplet_mse'}:
             positives1, negatives1 = torch.split(features_1, bsz // 2, dim=0)
@@ -130,10 +140,10 @@ class BiEncoderForClassification_(PreTrainedModel):
             logits = cosine_similarity(features_1, features_2, dim=1)
             if labels is not None:
                 loss = self.loss_fct_cls(**self.loss_fct_kwargs)(logits, labels)
-            #if key_ids is not None and labels is not None:
+            if key_ids is not None and labels is not None:
                 #loss += RankingLoss(margin=self.margin)(outputs.token_scores[self.layer_score][:, :split_posi],
                 #                       key_ids[:, :split_posi], attention_mask[:, :split_posi])
-                #loss += RankingLoss(margin=self.margin)(outputs.token_scores[self.layer_score], key_ids, attention_mask)
+                loss += RankingLoss(margin=self.margin)(outputs.token_scores[self.layer_score], key_ids, attention_mask)
 
         return BiConditionEncoderOutput(
             loss=loss,
@@ -149,3 +159,5 @@ class BiEncoderForClassification_(PreTrainedModel):
             feature_1 = torch.cat([feature_1, feature_c], dim=1)
             feature_2 = torch.cat([feature_2, feature_c], dim=1)
         return torch.cat([feature_1, feature_2], dim=0)
+    
+    

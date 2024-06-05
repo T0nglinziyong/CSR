@@ -571,26 +571,26 @@ def show_examples_from_bi_encoder(trainer, train_dataset, tokenizer, num_example
     fig_path = "./figures/"
     
     #selected_tokens, st2, st3,
-    for id, input_ids, input_ids_2, input_ids_3, label,\
+    for id, input_ids_1, input_ids_2, input_ids_3, label,\
         predict, attention_1, attention_2  in \
         zip(range(len(samples['input_ids'])), samples["input_ids"], samples["input_ids_2"], samples["input_ids_3"], samples['labels'],
                 predictions[0], predictions[-2], predictions[-1], #predictions[5], 
                 ): 
-        visual_score(input_ids,input_ids_2, attention_1, split_posi, tokenizer, 2*id, fig_path, label, predict)
-        visual_score(input_ids,input_ids_3, attention_2, split_posi, tokenizer, 2*id+1, fig_path, label, predict)
+        visual_score(input_ids_3,input_ids_1, attention_1, split_posi, tokenizer, 2*id, fig_path, label, predict)
+        visual_score(input_ids_3,input_ids_2, attention_2, split_posi, tokenizer, 2*id+1, fig_path, label, predict)
         print(f'------------------sample {id}--------------------')
         try:
-            print(f"condition: {tokenizer.decode(input_ids)}        key: {samples[id]['condition_key']}")
-            print(f"sentence1: {tokenizer.decode(input_ids_2)}")
-            print(f"sentence2: {tokenizer.decode(input_ids_3)}")
+            print(f"condition: {tokenizer.decode(input_ids_3)}        key: {samples[id]['condition_key']}")
+            print(f"sentence1: {tokenizer.decode(input_ids_1)}")
+            print(f"sentence2: {tokenizer.decode(input_ids_2)}")
             print(f"key1: {samples[id]['sentence1_key']}")
             print(f"key2: {samples[id]['sentence2_key']}")
 
             print(f"label: {label}, prediction: {predict}")
         except:
-            print(f"condition: {tokenizer.decode(input_ids)}")
-            print(f"sentence1: {tokenizer.decode(input_ids_2)}")
-            print(f"sentence2: {tokenizer.decode(input_ids_3)}")
+            print(f"condition: {tokenizer.decode(input_ids_3)}")
+            print(f"sentence1: {tokenizer.decode(input_ids_1)}")
+            print(f"sentence2: {tokenizer.decode(input_ids_2)}")
             print(f"label: {label}, prediction: {predict}")
 
 
@@ -670,7 +670,7 @@ def main():
     eval_dataset2 = load_files("data/simple_example.csv", process_function=preprocess_function)
     eval_dataset3 = load_files("data/hard_example.csv", process_function=preprocess_function)
 
-    if data_args.use_supervision and model_args.encoding_type == 'bi_encoder_':
+    if data_args.use_supervision and model_args.encoding_type == 'bi_encoder':
         get_add_supervision_function = get_add_supervision_function_(
             tokenizer,
             sentence1_key,

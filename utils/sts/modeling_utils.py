@@ -21,10 +21,10 @@ class DataCollatorWithPadding:
         # pad all sequences to max length
         out_features = {}
         for key in features[0].keys():
-            if key.startswith('input_ids') or key.startswith('attention_mask') or key.startswith('token_type_ids'):
+            if key.startswith('input_ids') or key.startswith('attention_mask') or key.startswith('token_type_ids') or key.startswith("key_ids"):
                 if key.startswith('input_ids'):
                     pad_token = self.pad_token_id
-                elif key.startswith('attention_mask'):
+                elif key.startswith('attention_mask') or key.startswith('key_ids'):
                     pad_token = 0
                 else:
                     pad_token = self.pad_token_type_id
@@ -36,6 +36,8 @@ class DataCollatorWithPadding:
         elif self.return_tensors == 'np':
             out_features = {key: np.array(value) for key, value in out_features.items()}
         return out_features
+
+
 
 
 def get_model(model_args):
