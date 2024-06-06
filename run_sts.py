@@ -59,7 +59,7 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 test_predict_file = "test_prediction.json"
-email_address = "linziyon22@mails.tsinghua.edu.cn"
+email_address = "liujunhan@mails.tsinghua.edu.cn"
 contrastive_objectives = {"triplet", "triplet_mse", "info", "info_mse"}
 objective_set = contrastive_objectives.union({"mse"})
 
@@ -554,13 +554,16 @@ def get_trainer(model, tokenizer, model_args, data_args, training_args, train_da
         compute_metrics=compute_metrics,
         tokenizer=tokenizer,
         data_collator=data_collator,
+        load_best_model_at_end=True,
+        metric_for_best_model="eval_spearmanr",  # 根据验证集上的最小损失选择最佳模型
+        greater_is_better=True,
     )
     trainer.remove_callback(PrinterCallback)
     trainer.add_callback(LogCallback)
     return trainer, data_collator
 
 
-def show_examples_from_bi_encoder(trainer, train_dataset, tokenizer, num_example):
+def show_examples_from_bi_encoder(trainer, train_dataset, tokenizer, num_example, path):
     logger.info("*** Showing Examples ***")
 
     sample_ids = random.sample(range(len(train_dataset)), num_example)
@@ -568,9 +571,8 @@ def show_examples_from_bi_encoder(trainer, train_dataset, tokenizer, num_example
     predictions = trainer.predict(samples.remove_columns("labels")).predictions
 
     split_posi = len(predictions[-1][0]) // 2
-    fig_path = "./figures/"
-    
-    #selected_tokens, st2, st3,
+    fig_path = path + "/figures/"
+
     for id, input_ids_1, input_ids_2, input_ids_3, label,\
         predict, attention_1, attention_2  in \
         zip(range(len(samples['input_ids'])), samples["input_ids"], samples["input_ids_2"], samples["input_ids_3"], samples['labels'],
@@ -578,6 +580,8 @@ def show_examples_from_bi_encoder(trainer, train_dataset, tokenizer, num_example
                 ): 
         visual_score(input_ids_3,input_ids_1, attention_1, split_posi, tokenizer, 2*id, fig_path, label, predict)
         visual_score(input_ids_3,input_ids_2, attention_2, split_posi, tokenizer, 2*id+1, fig_path, label, predict)
+        visual_score(input_ids_3,input_ids_1, attention_1, split_posi, tokenizer, 2*id, "./figures/", label, predict)
+        visual_score(input_ids_3,input_ids_2, attention_2, split_posi, tokenizer, 2*id+1, "./figures/", label, predict)
         print(f'------------------sample {id}--------------------')
         try:
             print(f"condition: {tokenizer.decode(input_ids_3)}        key: {samples[id]['condition_key']}")
@@ -693,12 +697,7 @@ def main():
 
 
     trainer, data_collator = get_trainer(model, tokenizer, model_args, data_args, training_args, train_dataset, eval_dataset)
-
-    #if training_args.show_example is not None:
-        #show_examples_from_bi_encoder(trainer, train_dataset, tokenizer, training_args.show_example) 
-        #visual_examples(trainer, train_dataset, tokenizer, 8, None)
     
-
     if training_args.do_train: 
         checkpoint = None
         if training_args.resume_from_checkpoint is not None:
@@ -763,7 +762,7 @@ def main():
 
     
     if training_args.show_example is not None:
-        show_examples_from_bi_encoder(trainer, eval_dataset, tokenizer, training_args.show_example) 
+        show_examples_from_bi_encoder(trainer, eval_dataset, tokenizer, training_args.show_example, training_args.output_dir) 
 
     if training_args.do_predict:
         logger.info("*** Predict ***")

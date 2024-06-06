@@ -121,23 +121,18 @@ class ScorerV1(nn.Module):
         super(ScorerV1, self).__init__()
         self.hidden_size = hidden_size
         self.use_condition = use_condition
-        self.use_position = use_position
-        self.max_position_embeddings = 128
         self.nheads = nheads
         self.attention_head_size = hidden_size // nheads
-        self.temperature = temperature
 
         self.W = nn.Linear(hidden_size, hidden_size) if use_condition else nn.Linear(hidden_size, 1)
         self.Wsent = nn.Linear(hidden_size, hidden_size) if sent_transform else nn.Identity()
-        self.distance_embedding = nn.Embedding(self.max_position_embeddings * 2 - 1,
-                                               self.nheads
-                                                #self.attention_head_size
-                                                )
-    
+
+        self.normalize = Normalizer(k=1, theta=0, temperature=temperature)
+
     def transpose_for_scores(self, input_tensor):
         # 将输入张量进行维度变换，以适应注意力权重计算
         batch_size, seq_length, hidden_size = input_tensor.shape
-        new_shape = (batch_size, seq_length, self.nheads, hidden_size // self.nheads)
+        new_shape = (batch_size, seq_length, self.nheads, self.attention_head_size)
         
         # 对张量进行维度变换
         output_tensor = input_tensor.view(*new_shape)
@@ -149,36 +144,16 @@ class ScorerV1(nn.Module):
 
     def forward(self, X_norm, mask=None, condition=None):
         if self.use_condition is None or (self.use_condition and condition is None):
-            count = torch.sum(mask, dim=-1, keepdim=True)
-            score = (torch.ones_like(mask) / count).unsqueeze(1).unsqueeze(2)
+            score = torch.ones_like(mask)
         elif self.use_condition:
             condition = self.transpose_for_scores(self.W(condition))
             X_norm = self.transpose_for_scores(self.Wsent(X_norm))
 
-            score = torch.matmul(condition, X_norm.transpose(-1, -2))
-            
-            if self.use_position:
-                slength = X_norm.shape[2]
-                position_ids_l = torch.arange(slength, dtype=torch.long, device=X_norm.device).view(-1, 1)
-                position_ids_r = torch.arange(slength, dtype=torch.long, device=X_norm.device).view(1, -1)
-                distance = position_ids_l - position_ids_r
-
-                positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
-                positional_embedding = positional_embedding.to(dtype=X_norm.dtype)  # fp16 compatibility
-
-                relative_position_scores = positional_embedding.permute(2, 0, 1).unsqueeze(0)
-                #relative_position_scores = torch.tanh(relative_position_scores) + 1
-
-                #relative_position_scores = torch.einsum("bhld,lrd->bhlr", X_norm, positional_embedding)
-                score = score + relative_position_scores
-            #score = score / math.sqrt(self.attention_head_size)
-            #s = torch.einsum("bhcd, bhsd -> bhcs", [condition, X_norm]) / math.sqrt(self.attention_head_size)
-            score = score / math.sqrt(self.attention_head_size)
+            score = torch.matmul(condition, X_norm.transpose(-1, -2)) / math.sqrt(self.attention_head_size)
+            score = torch.mean(torch.mean(score, dim=1), dim=1)
         else:
-            score = self.transpose_for_scores(self.W(X_norm)).permute(0, 1, 3, 2) # 0.0046269893646240234
-        score = torch.mean(torch.mean(score, dim=1), dim=1)
+            score = self.W(X_norm).squeeze() # 0.0046269893646240234
         score = Normalizer(k=1, theta=0)(score, mask)
-
         return score
     
 

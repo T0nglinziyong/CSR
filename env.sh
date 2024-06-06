@@ -7,12 +7,13 @@ export NUM_LABELS=1
 export TRANSFORM=False
 export USE_CONDITION=True # 在使用router_type0时有用，可暂时忽略
 export TEMPERATURE=1 # 在使用router_type0时有用，可暂时忽略
-export ROUT_START=24 # router开始的层数
+export ROUT_START=20 # router开始的层数
 export ROUT_END=24 # router结束的层数
-export ROUTER_TYPE=1 # 0-1: use additional router; 2-3 use attention score provided by self-attention
-export USE_ATTN=False # 额外操作是否要包含self-attention
+export ROUTER_TYPE=3 # 0-1: use additional router; 2-3 use attention score provided by self-attention
+export USE_ATTN=True # 额外操作是否要包含self-attention
 export MASK_TYPE=0
-export MASK_TYPE_2=0
+export MASK_TYPE_2=4
+export SEED=42
 
 export USE_SUPER=False # 使用gpt的监督信号
 export LAYER_SUPER=23 # 监督的层数

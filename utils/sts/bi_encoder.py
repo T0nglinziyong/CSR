@@ -4,7 +4,7 @@ from torch import nn
 from torch.nn.functional import cosine_similarity
 from .utils import *
 from .my_encoder import CustomizedEncoder
-from .routing import MultiHeadLinear
+from .routing import *
 
 from transformers.activations import ACT2FN
 from transformers.modeling_outputs import (
@@ -51,6 +51,7 @@ class BiEncoderForClassification_(PreTrainedModel):
         self.pooler = Pooler(config.pooler_type)
 
         self.multihead_ffd = None # MultiHeadLinear(hidden_size=config.hidden_size, num_heads=8, num_experts=8)
+        self.scorer = ScorerV1(config.hidden_size, nheads=8, use_condition=True, sent_transform=True)
         if config.pooler_type in {'avg_first_last', 'avg_top2'}:
             self.output_hidden_states = True
         else:
@@ -93,7 +94,7 @@ class BiEncoderForClassification_(PreTrainedModel):
         labels=None,
         **kwargs,
         ):
-        bsz = input_ids.shape[0]
+        bsz, split_posi = input_ids.shape
         input_ids = self.concat_features(input_ids, input_ids_2, input_ids_3)
         attention_mask = self.concat_features(attention_mask, attention_mask_2, attention_mask_3)
         token_type_ids = self.concat_features(token_type_ids, token_type_ids_2, token_type_ids_3)
@@ -115,7 +116,10 @@ class BiEncoderForClassification_(PreTrainedModel):
             output_attentions=False,
             output_token_scores=True,
             )
-        
+        # breakpoint()
+        features = outputs.last_hidden_state
+        #ention_mask[:, split_posi:] = 0
+        #attention_mask = self.scorer(features, attention_mask, features[:, split_posi:split_posi+1])
         features = self.pooler(attention_mask, outputs)
 
         if self.transform is not None:
@@ -141,7 +145,7 @@ class BiEncoderForClassification_(PreTrainedModel):
             if labels is not None:
                 loss = self.loss_fct_cls(**self.loss_fct_kwargs)(logits, labels)
             if key_ids is not None and labels is not None:
-                #loss += RankingLoss(margin=self.margin)(outputs.token_scores[self.layer_score][:, :split_posi],
+                #oss += RankingLoss(margin=self.margin)(outputs.token_scores[self.layer_score][:, :split_posi],
                 #                       key_ids[:, :split_posi], attention_mask[:, :split_posi])
                 loss += RankingLoss(margin=self.margin)(outputs.token_scores[self.layer_score], key_ids, attention_mask)
 

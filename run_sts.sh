@@ -70,7 +70,7 @@ python run_sts.py \
   --data_seed ${seed} \
   --fp16 True \
   --log_time_interval 15 \
-  --overwrite_output_dir False \
+  --overwrite_output_dir True \
   --show_example 8 \
   --mask_type ${mask_type} \
   --mask_type_2 ${mask_type_2} \

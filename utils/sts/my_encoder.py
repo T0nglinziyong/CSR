@@ -47,14 +47,15 @@ class CustomizedEncoder(PreTrainedModel):
         self.encoder = backbone.encoder.layer
         self.pooler = None
         for i in range(config.routing_start, config.routing_end):
-            self.encoder[i].add_module("Router", ScorerV1(hidden_size=config.hidden_size, temperature=config.temperature, nheads=1, 
+            self.encoder[i].add_module("Router", ScorerV1(hidden_size=config.hidden_size, temperature=config.temperature, nheads=16, 
                                                         use_condition=True, use_position=False, sent_transform=True))
             self.encoder[i].add_module("RouterV2", ScorerV2(hidden_size=config.hidden_size))
             
-            self.encoder[i].add_module("LightAttn", BertSelfAttention(hidden_size, nheads=8, dropout=0.1))
+            self.encoder[i].add_module("LightAttn", BertSelfAttention(hidden_size, nheads=16, dropout=0.1))
             self.encoder[i].add_module("Adapter", nn.Sequential(nn.Linear(hidden_size, hidden_size), nn.Dropout(config.hidden_dropout_prob)))
 
             self.encoder[i].add_module("FFD", nn.Sequential(nn.Linear(hidden_size, hidden_size*2), nn.ReLU(), nn.Dropout(config.hidden_dropout_prob), nn.Linear(hidden_size*2, hidden_size)))
+            #self.encoder[i].add_module("FFD", nn.Sequential(nn.Linear(hidden_size, hidden_size), nn.ReLU()))
             
             self.encoder[i].add_module("dropout", nn.Dropout(0.1))
             self.encoder[i].add_module("LayerNorm", nn.LayerNorm(hidden_size))
@@ -62,8 +63,8 @@ class CustomizedEncoder(PreTrainedModel):
             #self.encoder[i].LightAttn.load_state_dict(self.encoder[i].attention.self.state_dict())
             #self.encoder[i].Adapter.load_state_dict(self.encoder[i].attention.output.state_dict())
 
-            #self.encoder[i].Router.W.load_state_dict(self.encoder[i].attention.self.query.state_dict())
-            #self.encoder[i].Router.Wsent.load_state_dict(self.encoder[i].attention.self.key.state_dict())
+            self.encoder[i].Router.W.load_state_dict(self.encoder[i].attention.self.query.state_dict())
+            self.encoder[i].Router.Wsent.load_state_dict(self.encoder[i].attention.self.key.state_dict())
 
         for layer in self.encoder:
             layer.use_router = hasattr(layer, "Router")
@@ -210,6 +211,7 @@ class CustomizedEncoder(PreTrainedModel):
             encoder_attention_mask=attention_mask, 
             output_attentions=output_attentions or True,
         )
+        self_output = self_outputs[0]
 
         m, token_score = self.get_router_score(
             layer, 
@@ -220,9 +222,8 @@ class CustomizedEncoder(PreTrainedModel):
             org_mask=org_mask, 
             router_type=self.router_type
         )
-        conditional_output = self.router_forward(layer, hidden_states, org_mask) * m #* key_ids.unsqueeze(-1)
-
-        attention_output = attention.output(self_outputs[0], hidden_states + conditional_output)# linear + dropout + layernorm
+        conditional_output = self.router_forward(layer, self_output, org_mask) * m #* key_ids.unsqueeze(-1)
+        attention_output = attention.output(self_output, hidden_states + conditional_output)# linear + dropout + layernorm
         outputs = (attention_output,) + self_outputs[2:]  + (token_score,) # add attentions if we output them
         return outputs
     
@@ -348,8 +349,10 @@ class CustomizedEncoder(PreTrainedModel):
             # sentence cls在域内交互
             mask_3d[:, 0, split_posi :] = 0
         elif manip_type == 7:
-            # design for router2 attn_type1 
-            mask_3d[:, split_posi, split_posi :] = 0
+            # condition cls在域内交互
+            mask_3d[:, split_posi ,  : split_posi] = 0
+            mask_3d[:, :, split_posi] = 0
+            mask_3d[:, split_posi, split_posi] = 1
             
 
         return self.get_extended_attention_mask(mask_3d, (bsz, qlen))
@@ -414,7 +417,7 @@ class CustomizedEncoder(PreTrainedModel):
         split_pos = input_shape[1] // 2
         word_count = torch.sum(org_mask, dim=-1, keepdim=True)
         if not layer.use_router:
-            return 0, torch.mean(torch.mean(attention_prob, dim=1), dim=1) * word_count
+            return 0, torch.mean(attention_prob, dim=1)[:, 0] * word_count #torch.ones_like(org_mask)#
         
         
         if router_type == 0:
@@ -436,9 +439,12 @@ class CustomizedEncoder(PreTrainedModel):
             s = m * word_count
 
         elif router_type == 3:
+
             m = torch.mean(attention_prob, dim=1)[:, split_pos]
             m[:, split_pos:] = 0
-            s = m * word_count
+            m /= torch.sum(m, dim=-1, keepdim=True)
+            s = m  * word_count
+            #s[:, split_pos:] = 1
 
         elif router_type == 4:
             attention_prob = torch.mean(attention_prob, dim=1)
