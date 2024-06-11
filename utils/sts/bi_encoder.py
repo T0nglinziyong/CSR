@@ -102,7 +102,7 @@ class BiEncoderForClassification_(PreTrainedModel):
         head_mask = self.concat_features(head_mask, head_mask_2, head_mask_3)
         inputs_embeds = self.concat_features(inputs_embeds, inputs_embeds_2, inputs_embeds_3)
         key_ids = self.concat_features(key_ids, key_ids_2, key_ids_3)
-        
+
         outputs = self.backbone(
             input_ids=input_ids,
             attention_mask=attention_mask,

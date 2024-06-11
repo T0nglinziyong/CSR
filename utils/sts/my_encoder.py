@@ -92,6 +92,9 @@ class CustomizedEncoder(PreTrainedModel):
         batch_size, seq_length = input_shape
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
+        if attention_mask is None:
+            attention_mask = torch.ones_like(input_ids)
+
         if token_type_ids is None:
             if hasattr(self.embeddings, "token_type_ids"):
                 buffered_token_type_ids = self.embeddings.token_type_ids[:, :seq_length]
@@ -100,9 +103,10 @@ class CustomizedEncoder(PreTrainedModel):
             else:
                 token_type_ids = torch.zeros((batch_size, seq_length), dtype=torch.long, device=device)
 
+       
         if position_ids is None:
-            position_ids = create_position_ids_from_input_ids(input_ids, self.embeddings.padding_idx, seq_length//2)
-
+            position_ids = create_position_ids_from_input_ids(input_ids, self.embeddings.padding_idx, seq_length//2+1)
+        
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         embedding_output = self.embeddings(
@@ -114,7 +118,7 @@ class CustomizedEncoder(PreTrainedModel):
 
         extended_attention_mask = self.manip_attention_mask(attention_mask, manip_type=self.attn_type)
 
-        return embedding_output, extended_attention_mask, head_mask
+        return embedding_output, extended_attention_mask, attention_mask, head_mask
         
     def self_attention(
         self, attention,
@@ -312,7 +316,7 @@ class CustomizedEncoder(PreTrainedModel):
     def manip_attention_mask(self, mask, split_posi=None, manip_type=0, qlen=None):
         bsz, slen = mask.shape
         qlen = slen if qlen is None else qlen
-        split_posi = slen // 2
+        split_posi = slen // 2 + 1
 
         mask_expanded = mask.unsqueeze(1)
         mask_3d = mask_expanded.repeat(1, qlen, 1)
@@ -334,7 +338,7 @@ class CustomizedEncoder(PreTrainedModel):
         elif manip_type == 3:
             # sentence cls在域内交互
             mask_3d[:, 0, split_posi :] = 0
-            
+
         elif manip_type == 4:
             # 每个模块之间不直接进行交互
             mask_3d[:, : split_posi, split_posi :] = 0
@@ -348,11 +352,6 @@ class CustomizedEncoder(PreTrainedModel):
             # sentence只能与自身交互
             mask_3d[:, : split_posi, split_posi :] = 0
         
-        
-
-        
-            
-
         return self.get_extended_attention_mask(mask_3d, (bsz, qlen))
         
     def forward(
@@ -374,7 +373,7 @@ class CustomizedEncoder(PreTrainedModel):
         return_dict = return_dict if return_dict is not None else True
         output_token_scores = output_token_scores if output_token_scores is not None else True
 
-        embedding_output, default_attention_mask, head_mask \
+        embedding_output, default_attention_mask, attention_mask, head_mask \
             = self.get_embedding(input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds, )
         
         encoder_outputs = self.encoder_forward(
@@ -412,21 +411,20 @@ class CustomizedEncoder(PreTrainedModel):
         router_type = 2,
     ):
         input_shape = features.size()[:-1]
-        split_pos = input_shape[1] // 2
+        split_pos = input_shape[1] // 2 + 1
         word_count = torch.sum(org_mask, dim=-1, keepdim=True)
         if not layer.use_router:
             return 0, torch.mean(attention_prob, dim=1)[:, 0] * word_count #torch.ones_like(org_mask)#
         
-        
         if router_type == 0:
-            mask = org_mask
+            mask = org_mask.clone()
             mask[:, split_pos:] = 0
             word_count = torch.sum(mask, dim=-1, keepdim=True)
             m = layer.Router(features, mask, condition=features[:, split_pos:split_pos+1])
             s = m * word_count
 
         elif router_type == 1:
-            mask = org_mask
+            mask = org_mask.clone()
             mask[:, split_pos:] = 0
             word_count = torch.sum(mask, dim=-1, keepdim=True)
             m = layer.RouterV2(features, mask, condition=features[:, split_pos:split_pos+1])
@@ -437,8 +435,7 @@ class CustomizedEncoder(PreTrainedModel):
             s = m * word_count
 
         elif router_type == 3:
-
-            m = torch.mean(attention_prob, dim=1)[:, split_pos]
+            m = torch.mean(attention_prob, dim=1)[:, split_pos].clone()
             m[:, split_pos:] = 0
             m /= torch.sum(m, dim=-1, keepdim=True)
             s = m  * word_count
@@ -483,8 +480,9 @@ class CustomizedEncoder(PreTrainedModel):
 
 def create_position_ids_from_input_ids(input_ids, padding_idx, split_pos=None):
     if split_pos is not None:
-        input_ids[:, split_pos] = 1
-        mask = input_ids.ne(padding_idx).int()
+        tem = input_ids.clone()
+        tem[:, split_pos] = 1
+        mask = tem.ne(padding_idx).int()
         incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask)) * mask
         incremental_indices[:, split_pos] = incremental_indices[:, split_pos+1] - 1
     else:

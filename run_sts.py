@@ -672,8 +672,8 @@ def main():
     #train_dataset, eval_dataset, predict_dataset = get_preprocessed_data(raw_datasets, preprocess_function, training_args, data_args)
     
     train_dataset, eval_dataset, predict_dataset = load_dataset(data_args, training_args, None, process_function=preprocess_function)
-    eval_dataset2 = load_files("data/simple_example.csv", process_function=preprocess_function)
-    eval_dataset3 = load_files("data/hard_example.csv", process_function=preprocess_function)
+    #eval_dataset2 = load_files("data/simple_example.csv", process_function=preprocess_function)
+    #eval_dataset3 = load_files("data/hard_example.csv", process_function=preprocess_function)
 
     if data_args.use_supervision and model_args.encoding_type == 'bi_encoder':
         get_add_supervision_function = get_add_supervision_function_(
@@ -745,20 +745,6 @@ def main():
             trainer.log_metrics("train", metrics)
             combined.update(metrics)
             trainer.save_metrics("train", combined)
-        if eval_dataset2 is not None:
-            metrics = trainer.evaluate(
-                eval_dataset=eval_dataset2, metric_key_prefix="simple"
-            )
-            trainer.log_metrics("simple_examples", metrics)
-            combined.update(metrics)
-            trainer.save_metrics("simple_examples", combined)
-        if eval_dataset3 is not None:
-            metrics = trainer.evaluate(
-                eval_dataset=eval_dataset3, metric_key_prefix="hard"
-            )
-            trainer.log_metrics("hard_examples", metrics)
-            combined.update(metrics)
-            trainer.save_metrics("hard_examples", combined)
     
     if training_args.show_example is not None and False:
         show_examples_from_bi_encoder(trainer, eval_dataset, tokenizer, training_args.show_example, training_args.output_dir) 
@@ -797,6 +783,8 @@ def main():
         output_predict_file = os.path.join(training_args.output_dir, test_predict_file_2)
         if trainer.is_world_process_zero():
             with open(output_predict_file, "w", encoding="utf-8") as outfile:
+                json.dump(predictions, outfile)
+            with open(test_predict_file_2, "w", encoding="utf-8") as outfile:
                 json.dump(predictions, outfile)
 
 

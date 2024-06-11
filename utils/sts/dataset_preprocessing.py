@@ -38,13 +38,18 @@ def get_preprocessing_function(
             sent3_args = (examples[condition_key], )
             sent3_result = tokenizer(*sent3_args, padding=padding, max_length=max_seq_length, truncation=True)
 
-            sent1_result['input_ids'] = [input_ids + [sep_token_id] for input_ids in sent1_result['input_ids']]
+            '''sent1_result['input_ids'] = [input_ids + [sep_token_id] for input_ids in sent1_result['input_ids']]
             sent1_result['attention_mask'] = [attention_mask + [1] for attention_mask in sent1_result['attention_mask']]
 
             sent1_result['input_ids_2'] = [input_ids + [sep_token_id] for input_ids in sent2_result['input_ids']]
             sent1_result['attention_mask_2'] = [attention_mask + [1] for attention_mask in sent2_result['attention_mask']]
             sent1_result['input_ids_3'] = sent3_result['input_ids']
-            sent1_result['attention_mask_3'] = sent3_result['attention_mask']
+            sent1_result['attention_mask_3'] = sent3_result['attention_mask']'''
+
+            sent1_result['input_ids_2'] = sent2_result['input_ids']
+            sent1_result['attention_mask_2'] = sent2_result['attention_mask']
+            sent1_result['input_ids_3'] = [[sep_token_id] + input_ids for input_ids in sent3_result['input_ids']]
+            sent1_result['attention_mask_3'] = [[1] + attention_mask for attention_mask in sent3_result['attention_mask']]
 
             if 'token_type_ids' in sent2_result:
                 sent1_result['token_type_ids_2'] = sent2_result['token_type_ids']
