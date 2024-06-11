@@ -59,6 +59,7 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 test_predict_file = "test_prediction.json"
+test_predict_file_2 = "test_prediction_2.json"
 email_address = "liujunhan@mails.tsinghua.edu.cn"
 contrastive_objectives = {"triplet", "triplet_mse", "info", "info_mse"}
 objective_set = contrastive_objectives.union({"mse"})
@@ -554,9 +555,9 @@ def get_trainer(model, tokenizer, model_args, data_args, training_args, train_da
         compute_metrics=compute_metrics,
         tokenizer=tokenizer,
         data_collator=data_collator,
-        load_best_model_at_end=True,
-        metric_for_best_model="eval_spearmanr",  # 根据验证集上的最小损失选择最佳模型
-        greater_is_better=True,
+        #load_best_model_at_end=True,
+        #metric_for_best_model="eval_spearmanr",  # 根据验证集上的最小损失选择最佳模型
+        #greater_is_better=True,
     )
     trainer.remove_callback(PrinterCallback)
     trainer.add_callback(LogCallback)
@@ -719,7 +720,7 @@ def main():
         
     # Evaluation
     combined = {}
-    if training_args.do_eval and False:
+    if training_args.do_eval:
         logger.info("*** Evaluate ***")
         metrics = trainer.evaluate(eval_dataset=eval_dataset)
         max_eval_samples = (
@@ -758,10 +759,8 @@ def main():
             trainer.log_metrics("hard_examples", metrics)
             combined.update(metrics)
             trainer.save_metrics("hard_examples", combined)
-
-
     
-    if training_args.show_example is not None:
+    if training_args.show_example is not None and False:
         show_examples_from_bi_encoder(trainer, eval_dataset, tokenizer, training_args.show_example, training_args.output_dir) 
 
     if training_args.do_predict:
@@ -777,14 +776,30 @@ def main():
             else np.argmax(predictions, axis=1)
         )
         predictions = dict(enumerate(predictions.tolist()))
-        output_predict_file = os.path.join(
-            training_args.output_dir, test_predict_file
-        )
+        output_predict_file = os.path.join(training_args.output_dir, test_predict_file)
         if trainer.is_world_process_zero():
             with open(output_predict_file, "w", encoding="utf-8") as outfile:
                 json.dump(predictions, outfile)
             with open(test_predict_file, "w", encoding="utf-8") as outfile:
                 json.dump(predictions, outfile)
+
+        checkpoint_path = "./" + training_args.output_dir + "/checkpoint-709/pytorch_model.bin"
+        trainer.model.load_state_dict(torch.load(checkpoint_path))
+        predictions = trainer.predict(
+            predict_dataset, metric_key_prefix="predict_2"
+        ).predictions[0]
+        predictions = (
+            np.squeeze(predictions)
+            if model_args.objective in objective_set
+            else np.argmax(predictions, axis=1)
+        )
+        predictions = dict(enumerate(predictions.tolist()))
+        output_predict_file = os.path.join(training_args.output_dir, test_predict_file_2)
+        if trainer.is_world_process_zero():
+            with open(output_predict_file, "w", encoding="utf-8") as outfile:
+                json.dump(predictions, outfile)
+
+
 
     kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "CSTS"}
     if training_args.push_to_hub:

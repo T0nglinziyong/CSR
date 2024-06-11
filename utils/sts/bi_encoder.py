@@ -102,7 +102,6 @@ class BiEncoderForClassification_(PreTrainedModel):
         head_mask = self.concat_features(head_mask, head_mask_2, head_mask_3)
         inputs_embeds = self.concat_features(inputs_embeds, inputs_embeds_2, inputs_embeds_3)
         key_ids = self.concat_features(key_ids, key_ids_2, key_ids_3)
-       
         
         outputs = self.backbone(
             input_ids=input_ids,
@@ -116,10 +115,7 @@ class BiEncoderForClassification_(PreTrainedModel):
             output_attentions=False,
             output_token_scores=True,
             )
-        # breakpoint()
-        features = outputs.last_hidden_state
-        #ention_mask[:, split_posi:] = 0
-        #attention_mask = self.scorer(features, attention_mask, features[:, split_posi:split_posi+1])
+        
         features = self.pooler(attention_mask, outputs)
 
         if self.transform is not None:

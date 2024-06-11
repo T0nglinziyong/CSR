@@ -65,7 +65,7 @@ python run_sts.py \
   --log_level info \
   --disable_tqdm True \
   --save_strategy epoch \
-  --save_total_limit 1 \
+  --save_total_limit 2 \
   --seed ${seed} \
   --data_seed ${seed} \
   --fp16 True \

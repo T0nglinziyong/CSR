@@ -15,6 +15,8 @@ import functools
 class CustomizedEncoder(PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
+        #config.attention_probs_dropout_prob *= 2
+
         self.config = config
         self.attn_type = config.mask_type
         self.attn_type_2 = config.mask_type_2 \
@@ -98,14 +100,10 @@ class CustomizedEncoder(PreTrainedModel):
             else:
                 token_type_ids = torch.zeros((batch_size, seq_length), dtype=torch.long, device=device)
 
-        '''if position_ids is None:
-            position_ids = create_position_ids_from_input_ids(input_ids, self.embeddings.padding_idx)'''
-
-        if attention_mask is None:
-            attention_mask = torch.ones(((batch_size, seq_length)), device=device)
+        if position_ids is None:
+            position_ids = create_position_ids_from_input_ids(input_ids, self.embeddings.padding_idx, seq_length//2)
 
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
 
         embedding_output = self.embeddings(
             input_ids=input_ids, #word_embeddings维度是(50265, 1024)
@@ -116,7 +114,7 @@ class CustomizedEncoder(PreTrainedModel):
 
         extended_attention_mask = self.manip_attention_mask(attention_mask, manip_type=self.attn_type)
 
-        return embedding_output, extended_attention_mask, attention_mask
+        return embedding_output, extended_attention_mask, head_mask
         
     def self_attention(
         self, attention,
@@ -290,7 +288,6 @@ class CustomizedEncoder(PreTrainedModel):
             )
 
             hidden_states = layer_outputs[0]
-           
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
             if output_token_scores:
@@ -319,6 +316,8 @@ class CustomizedEncoder(PreTrainedModel):
 
         mask_expanded = mask.unsqueeze(1)
         mask_3d = mask_expanded.repeat(1, qlen, 1)
+        mask_3d[:, :, split_posi] = 0
+        mask_3d[:, split_posi, split_posi] = 1
 
         if manip_type == 0:
             pass
@@ -327,32 +326,31 @@ class CustomizedEncoder(PreTrainedModel):
             # cls只能在自己域内交互
             mask_3d[:, 0, split_posi :] = 0
             mask_3d[:, split_posi, : split_posi] = 0
-        
+
         elif manip_type == 2:
-            # condition只能与自身交互
-            mask_3d[:, split_posi : ,  : split_posi] = 0
+            # condition cls在域内交互
+            mask_3d[:, split_posi ,  : split_posi] = 0
 
         elif manip_type == 3:
-            # sentence只能与自身交互
-            mask_3d[:, : split_posi, split_posi :] = 0
-        
+            # sentence cls在域内交互
+            mask_3d[:, 0, split_posi :] = 0
+            
         elif manip_type == 4:
             # 每个模块之间不直接进行交互
             mask_3d[:, : split_posi, split_posi :] = 0
             mask_3d[:, split_posi :, : split_posi] = 0
-
+        
         elif manip_type == 5:
-            # condition cls在域内交互
-            mask_3d[:, split_posi ,  : split_posi] = 0
+            # condition只能与自身交互
+            mask_3d[:, split_posi : ,  : split_posi] = 0
 
         elif manip_type == 6:
-            # sentence cls在域内交互
-            mask_3d[:, 0, split_posi :] = 0
-        elif manip_type == 7:
-            # condition cls在域内交互
-            mask_3d[:, split_posi ,  : split_posi] = 0
-            mask_3d[:, :, split_posi] = 0
-            mask_3d[:, split_posi, split_posi] = 1
+            # sentence只能与自身交互
+            mask_3d[:, : split_posi, split_posi :] = 0
+        
+        
+
+        
             
 
         return self.get_extended_attention_mask(mask_3d, (bsz, qlen))
@@ -376,7 +374,7 @@ class CustomizedEncoder(PreTrainedModel):
         return_dict = return_dict if return_dict is not None else True
         output_token_scores = output_token_scores if output_token_scores is not None else True
 
-        embedding_output, default_attention_mask, attention_mask \
+        embedding_output, default_attention_mask, head_mask \
             = self.get_embedding(input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds, )
         
         encoder_outputs = self.encoder_forward(
@@ -481,3 +479,15 @@ class CustomizedEncoder(PreTrainedModel):
 
         #Z_cond = layer.LayerNorm(Z_cond * m.unsqueeze(-1) + feature)
         return Z_cond
+
+
+def create_position_ids_from_input_ids(input_ids, padding_idx, split_pos=None):
+    if split_pos is not None:
+        input_ids[:, split_pos] = 1
+        mask = input_ids.ne(padding_idx).int()
+        incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask)) * mask
+        incremental_indices[:, split_pos] = incremental_indices[:, split_pos+1] - 1
+    else:
+        mask = input_ids.ne(padding_idx).int()
+        incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask)) * mask
+    return incremental_indices.long() + padding_idx
