@@ -54,7 +54,7 @@ objective=${OBJECTIVE:-mse}  # mse, triplet, triplet_mse
 triencoder_head=${TRIENCODER_HEAD:-None}  # hadamard, concat (set for tri_encoder)
 num_train_epochs=${NUM_EPOCHS:-3}
 output_dir=${OUTPUT_DIR:-output}
-basic_config=${encoding}__obj_${objective}__version_2
+basic_config=${encoding}__obj_${objective}__version_0
 
 train_file=${TRAIN_FILE:-data/csts_train.csv}
 eval_file=${EVAL_FILE:-data/csts_validation.csv}
@@ -64,7 +64,7 @@ random_seeds=(42 43 44)
 
 # 循环遍历每个随机种子
 
-for routing_end in 24 23; do
+for routing_end in 24; do
 for routing_start in 23 22 21 20; do
 for use_attn in True False; do
 for seed in "${random_seeds[@]}"; do
@@ -100,7 +100,7 @@ for seed in "${random_seeds[@]}"; do
     --log_level info \
     --disable_tqdm True \
     --save_strategy epoch \
-    --save_total_limit 1 \
+    --save_total_limit 2 \
     --seed ${seed} \
     --data_seed ${seed} \
     --fp16 True \

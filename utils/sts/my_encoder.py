@@ -440,7 +440,6 @@ class CustomizedEncoder(PreTrainedModel):
             m[:, split_pos - 1:] = 0
             m /= torch.sum(m, dim=-1, keepdim=True)
             s = m  * word_count
-            #s[:, split_pos:] = 1
 
         elif router_type == 4:
             attention_prob = torch.mean(attention_prob, dim=1)
