@@ -316,6 +316,7 @@ class CustomizedEncoder(PreTrainedModel):
     def manip_attention_mask(self, mask, split_posi=None, manip_type=0, qlen=None):
         bsz, slen = mask.shape
         qlen = slen if qlen is None else qlen
+        # split_pos: condtion cls ; split_pos -1: sep token
         split_posi = slen // 2 + 1
 
         mask_expanded = mask.unsqueeze(1)
@@ -328,29 +329,29 @@ class CustomizedEncoder(PreTrainedModel):
         
         elif manip_type == 1:
             # cls只能在自己域内交互
-            mask_3d[:, 0, split_posi :] = 0
+            mask_3d[:, 0, split_posi - 1 :] = 0
             mask_3d[:, split_posi, : split_posi] = 0
 
         elif manip_type == 2:
             # condition cls在域内交互
-            mask_3d[:, split_posi ,  : split_posi] = 0
+            mask_3d[:, split_posi , : split_posi] = 0
 
         elif manip_type == 3:
             # sentence cls在域内交互
-            mask_3d[:, 0, split_posi :] = 0
+            mask_3d[:, 0, split_posi - 1 :] = 0
 
         elif manip_type == 4:
             # 每个模块之间不直接进行交互
-            mask_3d[:, : split_posi, split_posi :] = 0
+            mask_3d[:, : split_posi - 1, split_posi - 1 :] = 0
             mask_3d[:, split_posi :, : split_posi] = 0
         
         elif manip_type == 5:
             # condition只能与自身交互
-            mask_3d[:, split_posi : ,  : split_posi] = 0
+            mask_3d[:, split_posi : , : split_posi] = 0
 
         elif manip_type == 6:
             # sentence只能与自身交互
-            mask_3d[:, : split_posi, split_posi :] = 0
+            mask_3d[:, : split_posi - 1, split_posi - 1 :] = 0
         
         return self.get_extended_attention_mask(mask_3d, (bsz, qlen))
         
@@ -418,14 +419,14 @@ class CustomizedEncoder(PreTrainedModel):
         
         if router_type == 0:
             mask = org_mask.clone()
-            mask[:, split_pos:] = 0
+            mask[:, split_pos - 1:] = 0
             word_count = torch.sum(mask, dim=-1, keepdim=True)
             m = layer.Router(features, mask, condition=features[:, split_pos:split_pos+1])
             s = m * word_count
 
         elif router_type == 1:
             mask = org_mask.clone()
-            mask[:, split_pos:] = 0
+            mask[:, split_pos - 1:] = 0
             word_count = torch.sum(mask, dim=-1, keepdim=True)
             m = layer.RouterV2(features, mask, condition=features[:, split_pos:split_pos+1])
             s = m * word_count
@@ -436,7 +437,7 @@ class CustomizedEncoder(PreTrainedModel):
 
         elif router_type == 3:
             m = torch.mean(attention_prob, dim=1)[:, split_pos].clone()
-            m[:, split_pos:] = 0
+            m[:, split_pos - 1:] = 0
             m /= torch.sum(m, dim=-1, keepdim=True)
             s = m  * word_count
             #s[:, split_pos:] = 1
