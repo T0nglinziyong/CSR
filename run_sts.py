@@ -114,6 +114,10 @@ class TrainingArguments(HFTrainingArguments):
         default=None, metadata={}
     )
 
+    load_best_model_at_end: bool = field(default=True,)
+    metric_for_best_model: Optional[str] = field(default="eval_spearmanr",)  # 根据验证集上的最小损失选择最佳模型
+    greater_is_better: bool = field(default=True,)
+
 
 @dataclass
 class DataTrainingArguments:
@@ -556,9 +560,7 @@ def get_trainer(model, tokenizer, model_args, data_args, training_args, train_da
         compute_metrics=compute_metrics,
         tokenizer=tokenizer,
         data_collator=data_collator,
-        #load_best_model_at_end=True,
-        #metric_for_best_model="eval_spearmanr",  # 根据验证集上的最小损失选择最佳模型
-        #greater_is_better=True,
+        
     )
     trainer.remove_callback(PrinterCallback)
     trainer.add_callback(LogCallback)
@@ -572,7 +574,7 @@ def show_examples_from_bi_encoder(trainer, train_dataset, tokenizer, num_example
     samples = train_dataset.select(sample_ids)
     predictions = trainer.predict(samples.remove_columns("labels")).predictions
 
-    split_posi = len(predictions[-1][0]) // 2
+    split_posi = len(predictions[-1][0]) // 2 + 1
     fig_path = path + "/figures/"
 
     for id, input_ids_1, input_ids_2, input_ids_3, label,\
@@ -747,7 +749,7 @@ def main():
             combined.update(metrics)
             trainer.save_metrics("train", combined)
     
-    if training_args.show_example is not None and False:
+    if training_args.show_example is not None:
         show_examples_from_bi_encoder(trainer, eval_dataset, tokenizer, training_args.show_example, training_args.output_dir) 
 
     if training_args.do_predict:

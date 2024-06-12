@@ -33,7 +33,7 @@ def attention_plot(attention, x_texts, y_texts=None, figsize=(15, 10), annot=Fal
 
 def visual_score(input_ids_1, input_ids_2, token_scores, split_posi, tokenizer, id=None, figure_path=None, label=None, predict=None):
     # ids_1: condition; ids_2: sentence
-    ids_1 = np.array(input_ids_1, dtype=np.int32)
+    ids_1 = np.array(input_ids_1, dtype=np.int32)[1:]
     ids_2 = np.array(input_ids_2, dtype=np.int32)
     ids = np.concatenate([ids_1, ids_2], axis=0)
     texts = tokenizer.convert_ids_to_tokens(ids)
@@ -61,7 +61,7 @@ def visual_score(input_ids_1, input_ids_2, token_scores, split_posi, tokenizer, 
                    figure_name=f'token_score_{id}.png', figure_title=title)
     
 def resize_score(scores, l1, l2, split_posi):
-    return torch.cat([scores[split_posi + 1 : split_posi + l1 + 1], scores[0 : l2]], dim=0)
+    return torch.cat([scores[split_posi : split_posi + l1], scores[0 : l2]], dim=0)
     
 
 def visual_attn(input_ids_1, input_ids_2, attentions, split_posi, tokenizer, id=None, figure_path=None, label=None, predict=None):

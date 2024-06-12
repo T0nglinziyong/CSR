@@ -4,13 +4,11 @@ from torch import nn
 from torch.nn.functional import cosine_similarity
 from .utils import *
 from .my_encoder import CustomizedEncoder
+from .my_encoderv2 import CustomizedEncoderV2
 from .routing import *
 
 from transformers.activations import ACT2FN
-from transformers.modeling_outputs import (
-    SequenceClassifierOutput,
-)
-from transformers import PreTrainedModel, AutoModel
+from transformers import PreTrainedModel
 import logging
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s: %(message)s')
@@ -22,7 +20,7 @@ class BiEncoderForClassification_(PreTrainedModel):
     '''Encoder model with backbone and classification head.'''
     def __init__(self, config):
         super().__init__(config)
-        self.backbone = CustomizedEncoder(config)
+        self.backbone = CustomizedEncoderV2(config)
         '''self.backbone = AutoModel.from_pretrained(
             config.model_name_or_path,
             from_tf=bool('.ckpt' in config.model_name_or_path),
@@ -35,6 +33,7 @@ class BiEncoderForClassification_(PreTrainedModel):
 
         self.margin = config.margin
         self.layer_score = config.routing_end - 1 if config.layer_score is None else config.layer_score
+        self.triencoder_head = config.triencoder_head
 
         classifier_dropout = (
                 config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
@@ -48,10 +47,21 @@ class BiEncoderForClassification_(PreTrainedModel):
         else:
             self.transform = None
 
+        self.condition_transform = nn.Sequential(
+            nn.Dropout(classifier_dropout),
+            nn.Linear(config.hidden_size, config.hidden_size)
+        )
+        if self.triencoder_head == 'concat':
+            self.concat_transform = nn.Sequential(
+                nn.Dropout(classifier_dropout),
+                nn.Linear(config.hidden_size * 2, config.hidden_size),
+                ACT2FN[config.hidden_act],
+            )
+        elif self.triencoder_head == 'hadamard':
+            self.concat_transform = None
+
         self.pooler = Pooler(config.pooler_type)
 
-        self.multihead_ffd = None # MultiHeadLinear(hidden_size=config.hidden_size, num_heads=8, num_experts=8)
-        self.scorer = ScorerV1(config.hidden_size, nheads=8, use_condition=True, sent_transform=True)
         if config.pooler_type in {'avg_first_last', 'avg_top2'}:
             self.output_hidden_states = True
         else:
@@ -115,16 +125,23 @@ class BiEncoderForClassification_(PreTrainedModel):
             output_attentions=False,
             output_token_scores=True,
             )
+        features = outputs.last_hidden_state
+        features, features_c = torch.split(features, split_posi, dim=1)
+        attention_mask, attention_mask_c = torch.split(attention_mask, split_posi, dim=1)
         
-        features = self.pooler(attention_mask, outputs)
+        features = self.pooler(attention_mask, last_hidden=features_c)
+        features_c = self.pooler(attention_mask_c, last_hidden=features_c)
 
         if self.transform is not None:
             features = self.transform(features)
-        if self.multihead_ffd is not None:
-            features = self.multihead_ffd(features)
-
+        features_c = self.condition_transform(features_c)
+        
+        if self.triencoder_head == 'concat':
+            features = torch.cat([features, features_c], dim=-1)
+            features = self.concat_transform(features)
+        elif self.triencoder_head == 'hadamard':
+            features = features * features_c
         features_1, features_2 = torch.split(features, bsz, dim=0)  # [sentence1, condtion], [sentence2, condition]
-
         loss = None
         if self.config.objective in {'triplet', 'triplet_mse'}:
             positives1, negatives1 = torch.split(features_1, bsz // 2, dim=0)

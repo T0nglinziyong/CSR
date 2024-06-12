@@ -23,7 +23,8 @@ triencoder_head=${TRIENCODER_HEAD:-None}  # hadamard, concat (set for tri_encode
 num_train_epochs=${NUM_EPOCHS:-3}
 seed=${SEED:-42}
 output_dir=${OUTPUT_DIR:-output}
-basic_config=model_${model//\//__}__enc_${encoding}__obj_${objective}
+#basic_config=model_${model//\//__}__enc_${encoding}__obj_${objective}
+basic_config=${encoding}__obj_${objective}
 if [ "$routing_start" == "24" ]; then
     config=trans_${transform}__mask_${mask_type}__sup_${use_supervision}_${layer_super}_margin_${margin}_lr_${lr}__wd_${wd}__s_${seed}
 else
@@ -69,7 +70,7 @@ python run_sts.py \
   --data_seed ${seed} \
   --fp16 True \
   --log_time_interval 15 \
-  --overwrite_output_dir False \
+  --overwrite_output_dir True \
   --show_example 8 \
   --mask_type ${mask_type} \
   --mask_type_2 ${mask_type_2} \
