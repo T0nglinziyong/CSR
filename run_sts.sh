@@ -8,6 +8,7 @@ transform=${TRANSFORM:-False}  # whether to use an additional linear layer after
 routing_start=${ROUT_START:-20} # where to start using routing
 routing_end=${ROUT_END:-666} # where to end using routing
 router_type=${ROUTER_TYPE:-0}
+use_output=${USE_OUTPUT:-True}
 use_attn=${USE_ATTN:-False}
 use_condition=${USE_CONDITION:-True}
 temperature=${TEMPERATURE:-1}
@@ -25,8 +26,6 @@ output_dir=${OUTPUT_DIR:-output}
 basic_config=model_${model//\//__}__enc_${encoding}__obj_${objective}
 if [ "$routing_start" == "24" ]; then
     config=trans_${transform}__mask_${mask_type}__sup_${use_supervision}_${layer_super}_margin_${margin}_lr_${lr}__wd_${wd}__s_${seed}
-elif [ $router -ge 2 ]; then
-    config=trans_${transform}__rout_${router_type}_from_${routing_start}_to_${routing_end}__mask_${mask_type}_${mask_type_2}__sup_${use_supervision}_${layer_super}_margin_${margin}__lr_${lr}__wd_${wd}__s_${seed}
 else
     config=trans_${transform}__rout_${use_condition}_t_${temperature}_from_${routing_start}_to_${routing_end}__mask_${mask_type}_${mask_type_2}__sup_${use_supervision}_${layer_super}_margin_${margin}__lr_${lr}__wd_${wd}__s_${seed}
 fi
@@ -70,13 +69,14 @@ python run_sts.py \
   --data_seed ${seed} \
   --fp16 True \
   --log_time_interval 15 \
-  --overwrite_output_dir True \
+  --overwrite_output_dir False \
   --show_example 8 \
   --mask_type ${mask_type} \
   --mask_type_2 ${mask_type_2} \
   --routing_start ${routing_start} \
   --routing_end ${routing_end} \
   --router_type ${router_type} \
+  --use_output ${use_output} \
   --use_attn ${use_attn} \
   --use_condition ${use_condition} \
   --temperature ${temperature} \

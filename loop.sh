@@ -23,12 +23,9 @@ function get_config()
 
     if [ "$routing_start" == "24" ]; then
         config_=trans_${transform}__mask_${mask_type}__sup_${use_supervision}_${layer_super}_margin_${margin}_lr_${lr}__wd_${wd}__s_${seed}
-    elif [ $router_type -ge 2 ]; then
-        config_=trans_${transform}__rout_${router_type}_from_${routing_start}_to_${routing_end}__mask_${mask_type}_${mask_type_2}__attn_${use_attn}__s_${seed}
     else
-        config_=trans_${transform}__rout_from_${routing_start}_to_${routing_end}__mask_${mask_type}_${mask_type_2}__s_${seed}
+        config_=trans_${transform}__rout_${router_type}_from_${routing_start}_to_${routing_end}__mask_${mask_type}_${mask_type_2}__attn_${use_attn}__s_${seed}
     fi
-
     echo $config_
 }
 
@@ -62,10 +59,11 @@ test_file=${TEST_FILE:-data/csts_test.csv}
 
 random_seeds=(42 43 44)
 
-# 循环遍历每个随机种子
-
+basic_config=${encoding}__obj_${objective}__version_2
+use_output=False
+router_type=0
 for routing_end in 24; do
-for routing_start in 23 22 21 20; do
+for routing_start in 23 22 21 20 19 18; do
 for use_attn in True False; do
 for seed in "${random_seeds[@]}"; do
     config=$(get_config ${transform} ${use_condition} ${routing_start} ${routing_end} ${mask_type} ${mask_type_2} ${use_supervision} ${layer_super} ${margin} ${lr} ${wd} ${seed} ${router_type} ${use_attn})
@@ -105,12 +103,13 @@ for seed in "${random_seeds[@]}"; do
     --data_seed ${seed} \
     --fp16 True \
     --log_time_interval 15 \
-    --overwrite_output_dir True \
+    --overwrite_output_dir False \
     --mask_type ${mask_type} \
     --mask_type_2 ${mask_type_2} \
     --routing_start ${routing_start} \
     --routing_end ${routing_end} \
     --router_type ${router_type} \
+    --use_output ${use_output} \
     --use_attn ${use_attn} \
     --use_condition ${use_condition} \
     --temperature ${temperature} \

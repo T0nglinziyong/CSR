@@ -327,8 +327,8 @@ class ModelArguments:
             "
         }
     )
-
-    use_attn: Optional[bool] = field(default=False, )
+    use_output: Optional[bool] = field(default=False, )
+    use_attn: Optional[bool] = field(default=True, )
 
     mask_type: Optional[int] = field(
         default=0,
@@ -514,6 +514,7 @@ def get_model_and_tokenizer(model_args):
             "routing_start":model_args.routing_start,
             "routing_end":model_args.routing_end,
             "router_type":model_args.router_type,
+            "use_output":model_args.use_output,
             "use_attn":model_args.use_attn,
             "mask_type":model_args.mask_type,
             "mask_type_2":model_args.mask_type_2,

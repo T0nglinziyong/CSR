@@ -37,7 +37,7 @@ def get_preprocessing_function(
             sent2_result = tokenizer(*sent2_args, padding=padding, max_length=max_seq_length, truncation=True)
             sent3_args = (examples[condition_key], )
             sent3_result = tokenizer(*sent3_args, padding=padding, max_length=max_seq_length, truncation=True)
-
+            
             '''sent1_result['input_ids'] = [input_ids + [sep_token_id] for input_ids in sent1_result['input_ids']]
             sent1_result['attention_mask'] = [attention_mask + [1] for attention_mask in sent1_result['attention_mask']]
 

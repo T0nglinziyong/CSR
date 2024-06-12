@@ -15,8 +15,6 @@ import functools
 class CustomizedEncoder(PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        #config.attention_probs_dropout_prob *= 2
-
         self.config = config
         self.attn_type = config.mask_type
         self.attn_type_2 = config.mask_type_2 \
@@ -24,6 +22,7 @@ class CustomizedEncoder(PreTrainedModel):
         self.rout_start = config.routing_start
         self.rout_end = config.routing_end
         self.router_type = config.router_type
+        self.use_output = config.use_output
         self.use_attn = config.use_attn
 
         hidden_size = config.hidden_size
@@ -106,7 +105,7 @@ class CustomizedEncoder(PreTrainedModel):
        
         if position_ids is None:
             position_ids = create_position_ids_from_input_ids(input_ids, self.embeddings.padding_idx, seq_length//2+1)
-        
+
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         embedding_output = self.embeddings(
@@ -224,7 +223,7 @@ class CustomizedEncoder(PreTrainedModel):
             org_mask=org_mask, 
             router_type=self.router_type
         )
-        conditional_output = self.router_forward(layer, self_output, org_mask) * m #* key_ids.unsqueeze(-1)
+        conditional_output = self.router_forward(layer, hidden_states, attention_mask, self_output, org_mask) * m #* key_ids.unsqueeze(-1)
         attention_output = attention.output(self_output, hidden_states + conditional_output)# linear + dropout + layernorm
         outputs = (attention_output,) + self_outputs[2:]  + (token_score,) # add attentions if we output them
         return outputs
@@ -290,7 +289,6 @@ class CustomizedEncoder(PreTrainedModel):
                 output_attentions=output_attentions,
                 org_mask=org_mask,
             )
-
             hidden_states = layer_outputs[0]
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
@@ -450,22 +448,22 @@ class CustomizedEncoder(PreTrainedModel):
         
         return m.unsqueeze(-1), s
     
-    def router_forward(self, layer, features, org_mask):
+    def router_forward(self, layer, hidden_state, attention_mask, self_output, org_mask):
         if not layer.use_router:
             return 0
+        X_routed = self_output if self.use_output else hidden_state
         # Type1: Only FFD
         if not self.use_attn:
-            Z_cond = layer.FFD(features)
+            Z_cond = layer.FFD(X_routed)
             return Z_cond
 
         # Type2: LightAttn + FFD
-        X_routed = features
         #X_routed = torch.einsum("bkn, bnd ->bkd", [P, feature]) 
         mask_routed = self.manip_attention_mask(org_mask, manip_type=self.attn_type_2)
         
         Z_cond_ = layer.LightAttn(
             hidden_states=X_routed,
-            encoder_hidden_states=features,
+            encoder_hidden_states=X_routed,
             encoder_attention_mask=mask_routed,
         )[0]
         Z_cond = layer.Adapter(Z_cond_)
