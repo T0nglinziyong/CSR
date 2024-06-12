@@ -20,7 +20,7 @@ class BiEncoderForClassification_(PreTrainedModel):
     '''Encoder model with backbone and classification head.'''
     def __init__(self, config):
         super().__init__(config)
-        self.backbone = CustomizedEncoderV2(config)
+        self.backbone = CustomizedEncoder(config)
         '''self.backbone = AutoModel.from_pretrained(
             config.model_name_or_path,
             from_tf=bool('.ckpt' in config.model_name_or_path),

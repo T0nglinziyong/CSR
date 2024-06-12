@@ -47,7 +47,8 @@ class CustomizedEncoder(PreTrainedModel):
 
         self.encoder = backbone.encoder.layer
         self.pooler = None
-        for i in range(config.routing_start, config.routing_end):
+
+        for i in range(self.rout_start, self.rout_end):
             self.encoder[i].add_module("Router", ScorerV1(hidden_size=config.hidden_size, temperature=config.temperature, nheads=16, 
                                                         use_condition=True, use_position=False, sent_transform=True))
             self.encoder[i].add_module("RouterV2", ScorerV2(hidden_size=config.hidden_size))
@@ -56,11 +57,7 @@ class CustomizedEncoder(PreTrainedModel):
             self.encoder[i].add_module("Adapter", nn.Sequential(nn.Linear(hidden_size, hidden_size), nn.Dropout(config.hidden_dropout_prob)))
 
             self.encoder[i].add_module("FFD", nn.Sequential(nn.Linear(hidden_size, hidden_size*2), nn.ReLU(), nn.Dropout(config.hidden_dropout_prob), nn.Linear(hidden_size*2, hidden_size)))
-            #self.encoder[i].add_module("FFD", nn.Sequential(nn.Linear(hidden_size, hidden_size), nn.ReLU()))
-            
-            self.encoder[i].add_module("dropout", nn.Dropout(0.1))
-            self.encoder[i].add_module("LayerNorm", nn.LayerNorm(hidden_size))
-            self.encoder[i].add_module("ReLU", nn.ReLU())
+
             #self.encoder[i].LightAttn.load_state_dict(self.encoder[i].attention.self.state_dict())
             #self.encoder[i].Adapter.load_state_dict(self.encoder[i].attention.output.state_dict())
 
@@ -443,11 +440,10 @@ class CustomizedEncoder(PreTrainedModel):
             prob = torch.mean(attention_prob, dim=1).clone()
             weight_1 = prob[:, split_pos, split_pos+1:]
             weight_2 = prob[:, split_pos+1:, :]
-            m = torch.einsum("bc, cs->bs",[weight_1, weight_2])
+            m = torch.einsum("bc, bcs->bs",[weight_1, weight_2])
             m[:, split_pos - 1:] = 0
             m /= torch.sum(m, dim=-1, keepdim=True)
             s = m  * word_count
-            
 
         
         return m.unsqueeze(-1), s

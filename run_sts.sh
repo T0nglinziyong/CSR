@@ -1,12 +1,12 @@
 #!/bin/bash
-model=${MODEL:-princeton-nlp/sup-simcse-roberta-large}  # pre-trained model
+model=${MODEL:-./simcse-base}  # princeton-nlp/sup-simcse-roberta-large
 encoding=${ENCODER_TYPE:-bi_encoder}  # cross_encoder, bi_encoder, tri_encoder
 lr=${LR:-1e-5}  # learning rate
 wd=${WD:-0.1}  # weight decay
 
 transform=${TRANSFORM:-False}  # whether to use an additional linear layer after the encoder
-routing_start=${ROUT_START:-20} # where to start using routing
-routing_end=${ROUT_END:-666} # where to end using routing
+routing_start=${ROUT_START:--4} # where to start using routing
+routing_end=${ROUT_END:-0} # where to end using routing
 router_type=${ROUTER_TYPE:-0}
 use_output=${USE_OUTPUT:-True}
 use_attn=${USE_ATTN:-False}
@@ -15,7 +15,7 @@ temperature=${TEMPERATURE:-1}
 mask_type=${MASK_TYPE:-0} # mask type: 0-5
 mask_type_2=${MASK_TYPE_2:-4}
 use_supervision=${USE_SUPER:-False}
-layer_super=${LAYER_SUPER:-23}
+layer_super=${LAYER_SUPER:--1}
 margin=${MARGIN:-0.1}
 objective=${OBJECTIVE:-mse}  # mse, triplet, triplet_mse
 
@@ -65,7 +65,7 @@ python run_sts.py \
   --log_level info \
   --disable_tqdm True \
   --save_strategy epoch \
-  --save_total_limit 2 \
+  --save_total_limit 1 \
   --seed ${seed} \
   --data_seed ${seed} \
   --fp16 True \

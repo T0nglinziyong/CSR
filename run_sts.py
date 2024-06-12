@@ -314,11 +314,11 @@ class ModelArguments:
     )
 
     routing_start: Optional[int] = field(
-        default=19, metadata={"help": "The start of routing layer."}
+        default=-4, metadata={"help": "The start of routing layer."}
     )
 
     routing_end: Optional[int] = field(
-        default=24, metadata={"help": "The end of routing layer."}
+        default=0, metadata={"help": "The end of routing layer."}
     )
 
     router_type: Optional[int] = field(
@@ -363,7 +363,7 @@ class ModelArguments:
 
     temperature: Optional[float] = field(default=1.0)
 
-    layer_super: Optional[int] = field(default=23, )
+    layer_super: Optional[int] = field(default=-1, )
 
     margin: Optional[float] = field(
         default=0.1, metadata={"help": "The margin of Ranking Loss(if used)."}
@@ -758,25 +758,6 @@ def main():
         predict_dataset = predict_dataset.remove_columns("labels")
         predictions = trainer.predict(
             predict_dataset, metric_key_prefix="predict"
-        ).predictions#[0]
-        predictions = (
-            np.squeeze(predictions)
-            if model_args.objective in objective_set
-            else np.argmax(predictions, axis=1)
-        )
-        breakpoint()
-        predictions = dict(enumerate(predictions.tolist()))
-        output_predict_file = os.path.join(training_args.output_dir, test_predict_file)
-        if trainer.is_world_process_zero():
-            with open(output_predict_file, "w", encoding="utf-8") as outfile:
-                json.dump(predictions, outfile)
-            with open(test_predict_file, "w", encoding="utf-8") as outfile:
-                json.dump(predictions, outfile)
-
-        checkpoint_path = "./" + training_args.output_dir + "/checkpoint-709/pytorch_model.bin"
-        trainer.model.load_state_dict(torch.load(checkpoint_path))
-        predictions = trainer.predict(
-            predict_dataset, metric_key_prefix="predict_2"
         ).predictions[0]
         predictions = (
             np.squeeze(predictions)
@@ -784,11 +765,11 @@ def main():
             else np.argmax(predictions, axis=1)
         )
         predictions = dict(enumerate(predictions.tolist()))
-        output_predict_file = os.path.join(training_args.output_dir, test_predict_file_2)
+        output_predict_file = os.path.join(training_args.output_dir, test_predict_file)
         if trainer.is_world_process_zero():
             with open(output_predict_file, "w", encoding="utf-8") as outfile:
                 json.dump(predictions, outfile)
-            with open(test_predict_file_2, "w", encoding="utf-8") as outfile:
+            with open(test_predict_file, "w", encoding="utf-8") as outfile:
                 json.dump(predictions, outfile)
 
 

@@ -17,6 +17,7 @@ class CustomizedEncoderV2(PreTrainedModel):
         super().__init__(config)
         self.config = config
         self.attn_type = config.mask_type
+        assert self.attn_type == 4
         self.attn_type_2 = config.mask_type_2 \
             if config.mask_type_2 is not None else config.mask_type
         self.rout_start = config.routing_start
@@ -47,7 +48,8 @@ class CustomizedEncoderV2(PreTrainedModel):
 
         self.encoder = backbone.encoder.layer
         self.pooler = None
-        for i in range(config.routing_start, config.routing_end):
+
+        for i in range(self.rout_start, self.rout_end):
             self.encoder[i].add_module("Router", ScorerV1(hidden_size=config.hidden_size, temperature=config.temperature, nheads=16, 
                                                         use_condition=True, use_position=False, sent_transform=True))
             self.encoder[i].add_module("RouterV2", ScorerV2(hidden_size=config.hidden_size))
@@ -431,13 +433,12 @@ class CustomizedEncoderV2(PreTrainedModel):
 
         elif router_type == 3:
             attention_mask = self.manip_attention_mask(org_mask, split_pos, manip_type=self.attn_type_2)
-            attention_prob = F.softmax(attention_score + attention_mask)
+            attention_prob = F.softmax(attention_score + attention_mask, dim=-1)
             m = torch.mean(attention_prob, dim=1)[:, split_pos].clone()
             m[:, split_pos - 1:] = 0
             m /= torch.sum(m, dim=-1, keepdim=True)
             s = m  * word_count
-            breakpoint()
-        
+
         return m.unsqueeze(-1), s
 
 
