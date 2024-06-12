@@ -1,4 +1,5 @@
 output/
+figures/
 loop.sh
 test_prediction_2.json
 test_prediction.json
