@@ -1,6 +1,6 @@
 #!/bin/bash
 export MODEL=princeton-nlp/sup-simcse-roberta-large # openai/clip-vit-large-patch14 #
-export ENCODER_TYPE=bi_encoder
+export ENCODER_TYPE=tri_encoder
 export OBJECTIVE=mse #triplet_mse # classification # # mse
 export TRIENCODER_HEAD=hadamard
 export NUM_LABELS=1
@@ -15,7 +15,7 @@ export USE_OUTPUT=False # whether the input of the router is hidden_states or se
 export USE_ATTN=True # 额外操作是否要包含self-attention
 export MASK_TYPE=4
 export MASK_TYPE_2=4
-export SEED=43
+export SEED=44
 
 export USE_SUPER=False # 使用gpt的监督信号
 export LAYER_SUPER=23 # 监督的层数

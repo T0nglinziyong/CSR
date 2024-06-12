@@ -436,6 +436,7 @@ class CustomizedEncoderV2(PreTrainedModel):
             m[:, split_pos - 1:] = 0
             m /= torch.sum(m, dim=-1, keepdim=True)
             s = m  * word_count
+            breakpoint()
         
         return m.unsqueeze(-1), s
 

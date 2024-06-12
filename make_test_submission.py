@@ -53,4 +53,4 @@ if __name__ == "__main__":
     #parser.add_argument('predictions_file', type=str, help='The path to the JSON file containing the predictions')
     #parser.add_argument('--name', type=str, help='The name of the submission. Uses the filename if not specified')
     #args = parser.parse_args()
-    main("90092101@qq.com", "./output/bi_encoder__obj_mse__version_3/trans_True__rout_0_from_20_to_24__mask_4_4__attn_True__s_42/test_prediction.json")
+    main("90092101@qq.com", "test_prediction.json")

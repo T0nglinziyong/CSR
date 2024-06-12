@@ -723,7 +723,7 @@ def main():
         
     # Evaluation
     combined = {}
-    if training_args.do_eval:
+    if training_args.do_eval and False:
         logger.info("*** Evaluate ***")
         metrics = trainer.evaluate(eval_dataset=eval_dataset)
         max_eval_samples = (
@@ -749,7 +749,7 @@ def main():
             combined.update(metrics)
             trainer.save_metrics("train", combined)
     
-    if training_args.show_example is not None:
+    if training_args.show_example is not None and False:
         show_examples_from_bi_encoder(trainer, eval_dataset, tokenizer, training_args.show_example, training_args.output_dir) 
 
     if training_args.do_predict:
@@ -758,12 +758,13 @@ def main():
         predict_dataset = predict_dataset.remove_columns("labels")
         predictions = trainer.predict(
             predict_dataset, metric_key_prefix="predict"
-        ).predictions[0]
+        ).predictions#[0]
         predictions = (
             np.squeeze(predictions)
             if model_args.objective in objective_set
             else np.argmax(predictions, axis=1)
         )
+        breakpoint()
         predictions = dict(enumerate(predictions.tolist()))
         output_predict_file = os.path.join(training_args.output_dir, test_predict_file)
         if trainer.is_world_process_zero():

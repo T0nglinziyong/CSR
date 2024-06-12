@@ -440,11 +440,15 @@ class CustomizedEncoder(PreTrainedModel):
             s = m  * word_count
 
         elif router_type == 4:
-            attention_prob = torch.mean(attention_prob, dim=1)
-            m = attention_prob[:, split_pos, :split_pos]
-            m2 = attention_prob[:, 0, split_pos:]
-            m = torch.cat([m, m2], dim=-1)
-            s = m * word_count
+            prob = torch.mean(attention_prob, dim=1).clone()
+            weight_1 = prob[:, split_pos, split_pos+1:]
+            weight_2 = prob[:, split_pos+1:, :]
+            m = torch.einsum("bc, cs->bs",[weight_1, weight_2])
+            m[:, split_pos - 1:] = 0
+            m /= torch.sum(m, dim=-1, keepdim=True)
+            s = m  * word_count
+            
+
         
         return m.unsqueeze(-1), s
     
