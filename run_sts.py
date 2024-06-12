@@ -31,8 +31,8 @@ from utils.progress_logger import LogCallback
 from utils.sts.dataset_preprocessing import get_preprocessing_function, get_add_supervision_function_
 from utils.sts.modeling_utils import DataCollatorWithPadding, get_model
 from utils.sts.triplet_trainer import TripletTrainer
+from utils.visualize_attention import visual_score
 
-from visualize_attention import attention_plot, visual_attn, visual_score
 from make_test_submission import main as submission
 from matplotlib import pyplot as plt
 import torch.nn.functional as F
