@@ -3,7 +3,6 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn.functional import cosine_similarity
 from .utils import *
-from .my_encoder import CustomizedEncoder
 from .my_encoderv2 import CustomizedEncoderV2
 from .routing import *
 
@@ -15,21 +14,10 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 
 logger = logging.getLogger(__name__)
 
-
-class BiEncoderForClassification_(PreTrainedModel):
-    '''Encoder model with backbone and classification head.'''
+class TriEncoderForClassification_(PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.backbone = CustomizedEncoderV2(config)
-        '''self.backbone = AutoModel.from_pretrained(
-            config.model_name_or_path,
-            from_tf=bool('.ckpt' in config.model_name_or_path),
-            config=config,
-            cache_dir=config.cache_dir,
-            revision=config.model_revision,
-            use_auth_token=True if config.use_auth_token else None,
-            add_pooling_layer=False,
-        ).base_model'''
 
         self.margin = config.margin
         self.layer_score = config.routing_end - 1 if config.layer_score is None else config.layer_score
@@ -158,11 +146,10 @@ class BiEncoderForClassification_(PreTrainedModel):
             if labels is not None:
                 loss = self.loss_fct_cls(**self.loss_fct_kwargs)(logits, labels)
             if key_ids is not None and labels is not None:
-                #oss += RankingLoss(margin=self.margin)(outputs.token_scores[self.layer_score][:, :split_posi],
-                #                       key_ids[:, :split_posi], attention_mask[:, :split_posi])
-                loss += RankingLoss(margin=self.margin)(outputs.token_scores[self.layer_score], key_ids, attention_mask)
+                loss += RankingLoss(margin=self.margin)(outputs.token_scores[self.layer_score][:, :split_posi],
+                                       key_ids[:, :split_posi], attention_mask[:, :split_posi])
 
-        return BiConditionEncoderOutput(
+        return TriConditionEncoderOutput(
             loss=loss,
             logits=logits,
             token_scores=outputs.token_scores[self.layer_score][:bsz],

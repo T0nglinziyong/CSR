@@ -108,8 +108,6 @@ class BiEncoderForClassification_(PreTrainedModel):
         labels=None,
         **kwargs,
         ):
-        #start_time = time.time()
-        #global shared_data
         bsz, split_posi = input_ids.shape
         input_ids = self.concat_features(input_ids, input_ids_2, input_ids_3)
         attention_mask = self.concat_features(attention_mask, attention_mask_2, attention_mask_3)
@@ -129,7 +127,6 @@ class BiEncoderForClassification_(PreTrainedModel):
             output_hidden_states=self.output_hidden_states,
             output_attentions=False,
             output_token_scores=True,
-            #split_posi=split_posi+1,
             )
         features = outputs.last_hidden_state
         features, features_c = torch.split(features, split_posi, dim=1)
@@ -164,10 +161,8 @@ class BiEncoderForClassification_(PreTrainedModel):
             if labels is not None:
                 loss = self.loss_fct_cls(**self.loss_fct_kwargs)(logits, labels)
             if key_ids is not None and labels is not None:
-                #oss += RankingLoss(margin=self.margin)(outputs.token_scores[self.layer_score][:, :split_posi],
-                #                       key_ids[:, :split_posi], attention_mask[:, :split_posi])
                 loss += RankingLoss(margin=self.margin)(outputs.token_scores[self.layer_score], key_ids, attention_mask)
-        #shared_data['total_time'] += (time.time() - start_time)
+        
         return BiConditionEncoderOutput(
             loss=loss,
             logits=logits,

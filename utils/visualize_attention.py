@@ -50,8 +50,8 @@ def visual_score(input_ids_1, input_ids_2, token_scores, split_posi, tokenizer, 
 
     score = resize_score(torch.Tensor(token_scores), length1, length2, split_posi)
    
-    # # 显示Attention
-    attention = score.unsqueeze(0)#[0:1, :]
+    # 显示Attention
+    attention = score.unsqueeze(0)
     df = pd.DataFrame(attention, columns=texts, dtype=float)
 
     attention_plot(df, annot=True, x_texts=texts, y_texts=[''], figsize=(15, 5), 

@@ -9,8 +9,6 @@ import math
 #from .attn_dropout import *
 from .routing import *
 from .utils import *
-import time
-import functools
 
 class CustomizedEncoder(PreTrainedModel):
     def __init__(self, config):
@@ -22,8 +20,6 @@ class CustomizedEncoder(PreTrainedModel):
         self.rout_start = config.routing_start
         self.rout_end = config.routing_end
         self.router_type = config.router_type
-        self.use_output = config.use_output
-        self.use_attn = config.use_attn
 
         hidden_size = config.hidden_size
 
@@ -48,24 +44,15 @@ class CustomizedEncoder(PreTrainedModel):
         self.encoder = backbone.encoder.layer
         self.pooler = None
 
-        for i in range(self.rout_start, self.rout_end):
-            self.encoder[i].add_module("Router", ScorerV1(hidden_size=config.hidden_size, temperature=config.temperature, nheads=16, 
-                                                        use_condition=True, use_position=False, sent_transform=True))
-            
-            self.encoder[i].add_module("LightAttn", BertSelfAttention(hidden_size, nheads=16, dropout=0.1))
-            self.encoder[i].add_module("Adapter", nn.Sequential(nn.Linear(hidden_size, hidden_size), nn.Dropout(config.hidden_dropout_prob)))
+        for i, layer in enumerate(self.encoder):
+            layer.use_router = (i >= self.rout_start) and (i < self.rout_end) 
 
-            self.encoder[i].add_module("FFD", nn.Sequential(nn.Linear(hidden_size, hidden_size*2), nn.ReLU(), nn.Dropout(config.hidden_dropout_prob), nn.Linear(hidden_size*2, hidden_size)))
-
-            #self.encoder[i].LightAttn.load_state_dict(self.encoder[i].attention.self.state_dict())
-            #self.encoder[i].Adapter.load_state_dict(self.encoder[i].attention.output.state_dict())
-
-            self.encoder[i].Router.W.load_state_dict(self.encoder[i].attention.self.query.state_dict())
-            self.encoder[i].Router.Wsent.load_state_dict(self.encoder[i].attention.self.key.state_dict())
-
-        for layer in self.encoder:
-            layer.use_router = hasattr(layer, "Router")
-
+        if self.router_type < 2:
+            for i in range(self.rout_start, self.rout_end):
+                self.encoder[i].add_module("Router", 
+                    ScorerV1(hidden_size=config.hidden_size, temperature=config.temperature, 
+                        nheads=16, use_condition=True, use_position=False, sent_transform=True))
+          
     def get_embedding(
         self, 
         input_ids: Optional[torch.Tensor] = None,
@@ -246,7 +233,6 @@ class CustomizedEncoder(PreTrainedModel):
 
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
-
 
         intermediate_output = layer.intermediate(attention_output) # linear + act
         layer_output = layer.output(intermediate_output, attention_output)# linear + dropout + layernorm
