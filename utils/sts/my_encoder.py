@@ -51,7 +51,6 @@ class CustomizedEncoder(PreTrainedModel):
         for i in range(self.rout_start, self.rout_end):
             self.encoder[i].add_module("Router", ScorerV1(hidden_size=config.hidden_size, temperature=config.temperature, nheads=16, 
                                                         use_condition=True, use_position=False, sent_transform=True))
-            self.encoder[i].add_module("RouterV2", ScorerV2(hidden_size=config.hidden_size))
             
             self.encoder[i].add_module("LightAttn", BertSelfAttention(hidden_size, nheads=16, dropout=0.1))
             self.encoder[i].add_module("Adapter", nn.Sequential(nn.Linear(hidden_size, hidden_size), nn.Dropout(config.hidden_dropout_prob)))
@@ -220,8 +219,9 @@ class CustomizedEncoder(PreTrainedModel):
             org_mask=org_mask, 
             router_type=self.router_type
         )
-        conditional_output = self.router_forward(layer, hidden_states, attention_mask, self_output, org_mask) * m #* key_ids.unsqueeze(-1)
-        attention_output = attention.output(self_output, hidden_states + conditional_output)# linear + dropout + layernorm
+
+        conditional_output = self_output * m#self.router_forward(layer, hidden_states, attention_mask, self_output, org_mask) * m #* key_ids.unsqueeze(-1)
+        attention_output = attention.output(self_output + conditional_output, hidden_states)# linear + dropout + layernorm
         outputs = (attention_output,) + self_outputs[2:]  + (token_score,) # add attentions if we output them
         return outputs
     
@@ -359,10 +359,11 @@ class CustomizedEncoder(PreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         key_ids: Optional[torch.Tensor] = None,
+        split_posi: Optional[int] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_token_scores: Optional[bool] = None,
-        return_dict: Optional[bool] = None
+        return_dict: Optional[bool] = None,
         ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -411,19 +412,12 @@ class CustomizedEncoder(PreTrainedModel):
         word_count = torch.sum(org_mask, dim=-1, keepdim=True)
         if not layer.use_router:
             return 0, torch.mean(attention_prob, dim=1)[:, 0] * word_count #torch.ones_like(org_mask)#
-        
+
         if router_type == 0:
             mask = org_mask.clone()
             mask[:, split_pos - 1:] = 0
             word_count = torch.sum(mask, dim=-1, keepdim=True)
             m = layer.Router(features, mask, condition=features[:, split_pos:split_pos+1])
-            s = m * word_count
-
-        elif router_type == 1:
-            mask = org_mask.clone()
-            mask[:, split_pos - 1:] = 0
-            word_count = torch.sum(mask, dim=-1, keepdim=True)
-            m = layer.RouterV2(features, mask, condition=features[:, split_pos:split_pos+1])
             s = m * word_count
 
         elif router_type == 2:
@@ -433,8 +427,11 @@ class CustomizedEncoder(PreTrainedModel):
         elif router_type == 3:
             m = torch.mean(attention_prob, dim=1)[:, split_pos].clone()
             m[:, split_pos - 1:] = 0
+            word_count = torch.sum(org_mask[:, :split_pos-1], dim=-1, keepdim=True)
             m /= torch.sum(m, dim=-1, keepdim=True)
             s = m  * word_count
+            m = torch.clamp(m - 1/ word_count, min=0)
+            m /= torch.sum(m, dim=-1, keepdim=True)
 
         elif router_type == 4:
             prob = torch.mean(attention_prob, dim=1).clone()

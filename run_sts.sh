@@ -1,16 +1,13 @@
 #!/bin/bash
-model=${MODEL:-./simcse-base}  # princeton-nlp/sup-simcse-roberta-large
+model=${MODEL:-princeton-nlp/sup-simcse-roberta-large}  # 
 encoding=${ENCODER_TYPE:-bi_encoder}  # cross_encoder, bi_encoder, tri_encoder
 lr=${LR:-1e-5}  # learning rate
 wd=${WD:-0.1}  # weight decay
 
 transform=${TRANSFORM:-False}  # whether to use an additional linear layer after the encoder
 routing_start=${ROUT_START:--4} # where to start using routing
-routing_end=${ROUT_END:-0} # where to end using routing
-router_type=${ROUTER_TYPE:-0}
-use_output=${USE_OUTPUT:-True}
-use_attn=${USE_ATTN:-False}
-use_condition=${USE_CONDITION:-True}
+routing_end=${ROUT_END:-24} # where to end using routing
+router_type=${ROUTER_TYPE:-3}
 temperature=${TEMPERATURE:-1}
 mask_type=${MASK_TYPE:-0} # mask type: 0-5
 mask_type_2=${MASK_TYPE_2:-4}
@@ -21,16 +18,20 @@ objective=${OBJECTIVE:-mse}  # mse, triplet, triplet_mse
 
 triencoder_head=${TRIENCODER_HEAD:-None}  # hadamard, concat (set for tri_encoder)
 num_train_epochs=${NUM_EPOCHS:-3}
-seed=${SEED:-42}
+seed=${SEED:-45}
 output_dir=${OUTPUT_DIR:-output}
-#basic_config=model_${model//\//__}__enc_${encoding}__obj_${objective}
-basic_config=${encoding}__obj_${objective}
-if [ "$routing_start" == "24" ]; then
-    config=trans_${transform}__mask_${mask_type}__sup_${use_supervision}_${layer_super}_margin_${margin}_lr_${lr}__wd_${wd}__s_${seed}
+basic_config=model_${model//\//__}__enc_${encoding}
+if [ "$routing_start" == "$routing_end" ]; then
+    config=trans_${transform}__obj_${objective}__mask_${mask_type}
 else
-    config=trans_${transform}__rout_${use_condition}_t_${temperature}_from_${routing_start}_to_${routing_end}__mask_${mask_type}_${mask_type_2}__sup_${use_supervision}_${layer_super}_margin_${margin}__lr_${lr}__wd_${wd}__s_${seed}
+    config=trans_${transform}__obj_${objective}__from_${routing_start}_to_${routing_end}__mask_${mask_type}_${mask_type_2}
 fi
-#config=trans_${transform}__rout_${use_condition}_t_${temperature}_from_${routing_start}_to_${routing_end}__mask_${mask_type}_${mask_type_2}__sup_${use_supervision}__lr_${lr}__wd_${wd}__s_${seed}
+
+if [ "$use_supervision" == "True" ]; then
+    config=${config}__sup_${layer_super}_margin_${margin}_lr_${lr}__wd_${wd}__s_${seed}
+else
+    config=${config}__lr_${lr}__wd_${wd}__s_${seed}
+fi
 train_file=${TRAIN_FILE:-data/csts_train.csv}
 eval_file=${EVAL_FILE:-data/csts_validation.csv}
 test_file=${TEST_FILE:-data/csts_test.csv}
@@ -70,16 +71,13 @@ python run_sts.py \
   --data_seed ${seed} \
   --fp16 True \
   --log_time_interval 15 \
-  --overwrite_output_dir False \
+  --overwrite_output_dir False\
   --show_example 8 \
   --mask_type ${mask_type} \
   --mask_type_2 ${mask_type_2} \
   --routing_start ${routing_start} \
   --routing_end ${routing_end} \
   --router_type ${router_type} \
-  --use_output ${use_output} \
-  --use_attn ${use_attn} \
-  --use_condition ${use_condition} \
   --temperature ${temperature} \
   --use_supervision ${use_supervision} \
   --layer_super ${layer_super} \

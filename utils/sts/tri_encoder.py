@@ -10,15 +10,11 @@ from .routing import *
 from transformers.activations import ACT2FN
 from transformers import PreTrainedModel
 import logging
-import time
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s: %(message)s')
 
 logger = logging.getLogger(__name__)
-# globals.py
-shared_data = {
-    'total_time': 0
-}
+
 
 class BiEncoderForClassification_(PreTrainedModel):
     '''Encoder model with backbone and classification head.'''
@@ -108,8 +104,6 @@ class BiEncoderForClassification_(PreTrainedModel):
         labels=None,
         **kwargs,
         ):
-        #start_time = time.time()
-        #global shared_data
         bsz, split_posi = input_ids.shape
         input_ids = self.concat_features(input_ids, input_ids_2, input_ids_3)
         attention_mask = self.concat_features(attention_mask, attention_mask_2, attention_mask_3)
@@ -118,6 +112,7 @@ class BiEncoderForClassification_(PreTrainedModel):
         head_mask = self.concat_features(head_mask, head_mask_2, head_mask_3)
         inputs_embeds = self.concat_features(inputs_embeds, inputs_embeds_2, inputs_embeds_3)
         key_ids = self.concat_features(key_ids, key_ids_2, key_ids_3)
+
         outputs = self.backbone(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -129,7 +124,6 @@ class BiEncoderForClassification_(PreTrainedModel):
             output_hidden_states=self.output_hidden_states,
             output_attentions=False,
             output_token_scores=True,
-            #split_posi=split_posi+1,
             )
         features = outputs.last_hidden_state
         features, features_c = torch.split(features, split_posi, dim=1)
@@ -167,7 +161,7 @@ class BiEncoderForClassification_(PreTrainedModel):
                 #oss += RankingLoss(margin=self.margin)(outputs.token_scores[self.layer_score][:, :split_posi],
                 #                       key_ids[:, :split_posi], attention_mask[:, :split_posi])
                 loss += RankingLoss(margin=self.margin)(outputs.token_scores[self.layer_score], key_ids, attention_mask)
-        #shared_data['total_time'] += (time.time() - start_time)
+
         return BiConditionEncoderOutput(
             loss=loss,
             logits=logits,

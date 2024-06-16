@@ -1,8 +1,6 @@
 import json
 import logging
 import os
-
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import random
 import sys
 from dataclasses import dataclass, field
@@ -40,16 +38,9 @@ import pandas as pd
 import seaborn as sns
 import os   
 import csv
-'''
-seed_value = 666
-random.seed(seed_value)
-torch.manual_seed(seed_value)
-torch.cuda.manual_seed_all(seed_value)'''
+import time
 
-os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 os.environ["WANDB_DISABLED"] = "true"
-#np.set_printoptions(precision=2, suppress=True)
-
 logging.basicConfig(
     level=logging.INFO, 
     format="%(asctime)s - %(name)s - %(levelname)s: %(message)s",
@@ -59,8 +50,6 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 test_predict_file = "test_prediction.json"
-test_predict_file_2 = "test_prediction_2.json"
-email_address = "liujunhan@mails.tsinghua.edu.cn"
 contrastive_objectives = {"triplet", "triplet_mse", "info", "info_mse"}
 objective_set = contrastive_objectives.union({"mse"})
 
@@ -115,7 +104,7 @@ class TrainingArguments(HFTrainingArguments):
     )
 
     load_best_model_at_end: bool = field(default=True,)
-    metric_for_best_model: Optional[str] = field(default="eval_spearmanr",)  # 根据验证集上的最小损失选择最佳模型
+    metric_for_best_model: Optional[str] = field(default="eval_spearmanr",)
     greater_is_better: bool = field(default=True,)
 
 
@@ -331,8 +320,6 @@ class ModelArguments:
             "
         }
     )
-    use_output: Optional[bool] = field(default=False, )
-    use_attn: Optional[bool] = field(default=True, )
 
     mask_type: Optional[int] = field(
         default=0,
@@ -398,7 +385,7 @@ def get_parser():
         + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
     )
 
-    if model_args.objective in {"triplet", "triplet_mse"}:
+    if model_args.objective in contrastive_objectives:
         training_args.dataloader_drop_last = True
         training_args.per_device_eval_batch_size = 2
     logger.info("Training/evaluation parameters %s" % training_args)
@@ -490,7 +477,6 @@ def get_model_and_tokenizer(model_args):
         if model_args.config_name
         else model_args.model_name_or_path,
         num_labels=1,
-        # finetuning_task=None,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
@@ -518,18 +504,15 @@ def get_model_and_tokenizer(model_args):
             "routing_start":model_args.routing_start,
             "routing_end":model_args.routing_end,
             "router_type":model_args.router_type,
-            "use_output":model_args.use_output,
-            "use_attn":model_args.use_attn,
             "mask_type":model_args.mask_type,
             "mask_type_2":model_args.mask_type_2,
-            "use_condition":model_args.use_condition,
             "temperature":model_args.temperature,
             "layer_score":model_args.layer_super,
             "margin":model_args.margin,
         }
     )
     model = model_cls(config=config)
-    #model.load_state_dict(torch.load('.//output//princeton-nlp__sup-simcse-roberta-large//enc_bi_encoder___lr_1e-5__wd_0.1__trans_False__obj_mse__tri_None__s_42//pytorch_model.bin'), strict=False)
+    
     if model_args.freeze_encoder:
         for param in model.backbone.parameters():
             param.requires_grad = False
@@ -564,10 +547,10 @@ def get_trainer(model, tokenizer, model_args, data_args, training_args, train_da
     )
     trainer.remove_callback(PrinterCallback)
     trainer.add_callback(LogCallback)
-    return trainer, data_collator
+    return trainer
 
 
-def show_examples_from_bi_encoder(trainer, train_dataset, tokenizer, num_example, path):
+def show_examples_from_my_encoder(trainer, train_dataset, tokenizer, num_example, path):
     logger.info("*** Showing Examples ***")
 
     sample_ids = random.sample(range(len(train_dataset)), num_example)
@@ -580,12 +563,10 @@ def show_examples_from_bi_encoder(trainer, train_dataset, tokenizer, num_example
     for id, input_ids_1, input_ids_2, input_ids_3, label,\
         predict, attention_1, attention_2  in \
         zip(range(len(samples['input_ids'])), samples["input_ids"], samples["input_ids_2"], samples["input_ids_3"], samples['labels'],
-                predictions[0], predictions[-2], predictions[-1], #predictions[5], 
+                predictions[0], predictions[-2], predictions[-1], 
                 ): 
         visual_score(input_ids_3,input_ids_1, attention_1, split_posi, tokenizer, 2*id, fig_path, label, predict)
         visual_score(input_ids_3,input_ids_2, attention_2, split_posi, tokenizer, 2*id+1, fig_path, label, predict)
-        visual_score(input_ids_3,input_ids_1, attention_1, split_posi, tokenizer, 2*id, "./figures/", label, predict)
-        visual_score(input_ids_3,input_ids_2, attention_2, split_posi, tokenizer, 2*id+1, "./figures/", label, predict)
         print(f'------------------sample {id}--------------------')
         try:
             print(f"condition: {tokenizer.decode(input_ids_3)}        key: {samples[id]['condition_key']}")
@@ -603,11 +584,7 @@ def show_examples_from_bi_encoder(trainer, train_dataset, tokenizer, num_example
 
 
 def main():
-    torch.autograd.set_detect_anomaly(False)
-
     model_args, data_args, training_args = get_parser()
-
-    #raw_datasets = get_data(model_args, data_args, training_args)
 
     model, tokenizer = get_model_and_tokenizer(model_args)
     
@@ -631,14 +608,10 @@ def main():
                 "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
             )
     
-    #set_seed(training_args.seed)
-
-    
     # Padding strategy
     padding = "max_length" if data_args.pad_to_max_length else False
     
     data_args.min_similarity, data_args.max_similarity = (1, 5)
- 
 
     if data_args.max_seq_length > tokenizer.model_max_length:
         logger.warning(
@@ -669,16 +642,11 @@ def main():
         condition_only=data_args.condition_only,
         sentences_only=data_args.sentences_only,
     )
-    
-    
 
-    #train_dataset, eval_dataset, predict_dataset = get_preprocessed_data(raw_datasets, preprocess_function, training_args, data_args)
-    
     train_dataset, eval_dataset, predict_dataset = load_dataset(data_args, training_args, None, process_function=preprocess_function)
-    #eval_dataset2 = load_files("data/simple_example.csv", process_function=preprocess_function)
-    #eval_dataset3 = load_files("data/hard_example.csv", process_function=preprocess_function)
+    eval_dataset_2 = None #load_files("", process_function=preprocess_function)
 
-    if data_args.use_supervision and model_args.encoding_type == 'bi_encoder':
+    if data_args.use_supervision:
         get_add_supervision_function = get_add_supervision_function_(
             tokenizer,
             sentence1_key,
@@ -699,8 +667,7 @@ def main():
             logger.info(f"tokens: {tokenizer.decode(input_ids)}")
             logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
 
-
-    trainer, data_collator = get_trainer(model, tokenizer, model_args, data_args, training_args, train_dataset, eval_dataset)
+    trainer = get_trainer(model, tokenizer, model_args, data_args, training_args, train_dataset, eval_dataset)
     
     if training_args.do_train: 
         checkpoint = None
@@ -723,7 +690,7 @@ def main():
         
     # Evaluation
     combined = {}
-    if training_args.do_eval and False:
+    if training_args.do_eval:
         logger.info("*** Evaluate ***")
         metrics = trainer.evaluate(eval_dataset=eval_dataset)
         max_eval_samples = (
@@ -749,9 +716,9 @@ def main():
             combined.update(metrics)
             trainer.save_metrics("train", combined)
     
-    if training_args.show_example is not None and False:
-        show_examples_from_bi_encoder(trainer, eval_dataset, tokenizer, training_args.show_example, training_args.output_dir) 
-
+    if training_args.show_example is not None:
+        show_examples_from_my_encoder(trainer, eval_dataset, tokenizer, training_args.show_example, training_args.output_dir) 
+    
     if training_args.do_predict:
         logger.info("*** Predict ***")
         # Removing the `label` columns because it contains -1 and Trainer won't like that.
@@ -771,8 +738,6 @@ def main():
                 json.dump(predictions, outfile)
             with open(test_predict_file, "w", encoding="utf-8") as outfile:
                 json.dump(predictions, outfile)
-
-
 
     kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "CSTS"}
     if training_args.push_to_hub:

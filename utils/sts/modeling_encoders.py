@@ -350,6 +350,7 @@ class TriEncoderForClassification(PreTrainedModel):
         position_ids = concat_features(position_ids, position_ids_2, position_ids_3)
         head_mask = concat_features(head_mask, head_mask_2, head_mask_3)
         inputs_embeds = concat_features(inputs_embeds, inputs_embeds_2, inputs_embeds_3)
+
         outputs = self.backbone(
             input_ids=input_ids,
             attention_mask=attention_mask,

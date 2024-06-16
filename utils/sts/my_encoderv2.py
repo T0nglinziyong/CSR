@@ -11,22 +11,32 @@ from .routing import *
 from .utils import *
 import time
 import functools
+# tri-encoder 和 bi-encoder在架构上的细微区别
+# tri-encoder应该掩码掉中间的sep，而不是新加cls
+import torch
+import torch.utils.checkpoint
+from torch import nn
+import torch.nn.functional as F
+from typing import Union, Tuple, Optional
+from transformers.modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
+from transformers import PreTrainedModel, AutoModel
+import math
+#from .attn_dropout import *
+from .routing import *
+from .utils import *
+import time
+import functools
 
 class CustomizedEncoderV2(PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
         self.attn_type = config.mask_type
-        assert self.attn_type == 4
         self.attn_type_2 = config.mask_type_2 \
             if config.mask_type_2 is not None else config.mask_type
         self.rout_start = config.routing_start
         self.rout_end = config.routing_end
         self.router_type = config.router_type
-        self.use_output = config.use_output
-        self.use_attn = config.use_attn
-
-        hidden_size = config.hidden_size
 
         backbone = AutoModel.from_pretrained(
             config.model_name_or_path,
@@ -40,37 +50,16 @@ class CustomizedEncoderV2(PreTrainedModel):
         
         #for param in backbone.parameters():
         #    param.requires_grad = False
-        
-        # the original Roberta only has one token_type_embedding
         self.embeddings = backbone.embeddings
-        self.embeddings.token_type_embedding = nn.Embedding(2, config.hidden_size)
-        self.embeddings.token_type_embedding.weight.data = backbone.embeddings.token_type_embeddings.weight.data.repeat(2, 1)
-
         self.encoder = backbone.encoder.layer
         self.pooler = None
 
         for i in range(self.rout_start, self.rout_end):
             self.encoder[i].add_module("Router", ScorerV1(hidden_size=config.hidden_size, temperature=config.temperature, nheads=16, 
                                                         use_condition=True, use_position=False, sent_transform=True))
-            self.encoder[i].add_module("RouterV2", ScorerV2(hidden_size=config.hidden_size))
             
-            self.encoder[i].add_module("LightAttn", BertSelfAttention(hidden_size, nheads=16, dropout=0.1))
-            self.encoder[i].add_module("Adapter", nn.Sequential(nn.Linear(hidden_size, hidden_size), nn.Dropout(config.hidden_dropout_prob)))
-
-            self.encoder[i].add_module("FFD", nn.Sequential(nn.Linear(hidden_size, hidden_size*2), nn.ReLU(), nn.Dropout(config.hidden_dropout_prob), nn.Linear(hidden_size*2, hidden_size)))
-            #self.encoder[i].add_module("FFD", nn.Sequential(nn.Linear(hidden_size, hidden_size), nn.ReLU()))
-            
-            self.encoder[i].add_module("dropout", nn.Dropout(0.1))
-            self.encoder[i].add_module("LayerNorm", nn.LayerNorm(hidden_size))
-            self.encoder[i].add_module("ReLU", nn.ReLU())
-            #self.encoder[i].LightAttn.load_state_dict(self.encoder[i].attention.self.state_dict())
-            #self.encoder[i].Adapter.load_state_dict(self.encoder[i].attention.output.state_dict())
-
-            self.encoder[i].Router.W.load_state_dict(self.encoder[i].attention.self.query.state_dict())
-            self.encoder[i].Router.Wsent.load_state_dict(self.encoder[i].attention.self.key.state_dict())
-
-        for layer in self.encoder:
-            layer.use_router = hasattr(layer, "Router")
+        for i, layer in enumerate(self.encoder):
+            layer.use_router = (i >= self.rout_start) and (i < self.rout_end) 
 
     def get_embedding(
         self, 
@@ -107,7 +96,7 @@ class CustomizedEncoderV2(PreTrainedModel):
        
         if position_ids is None:
             position_ids = create_position_ids_from_input_ids(input_ids, self.embeddings.padding_idx, seq_length//2+1)
-
+      
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         embedding_output = self.embeddings(
@@ -225,8 +214,9 @@ class CustomizedEncoderV2(PreTrainedModel):
             org_mask=org_mask, 
             router_type=self.router_type
         )
-        conditional_output = self_output * m #* key_ids.unsqueeze(-1)
-        attention_output = attention.output(self_output, hidden_states + conditional_output)# linear + dropout + layernorm
+
+        conditional_output = self_output * m#self.router_forward(layer, hidden_states, attention_mask, self_output, org_mask) * m #* key_ids.unsqueeze(-1)
+        attention_output = attention.output(self_output + conditional_output, hidden_states)# linear + dropout + layernorm
         outputs = (attention_output,) + self_outputs[2:]  + (token_score,) # add attentions if we output them
         return outputs
     
@@ -321,8 +311,8 @@ class CustomizedEncoderV2(PreTrainedModel):
 
         mask_expanded = mask.unsqueeze(1)
         mask_3d = mask_expanded.repeat(1, qlen, 1)
-        mask_3d[:, :, split_posi - 1] = 0
-        mask_3d[:, split_posi - 1, split_posi - 1] = 1
+        mask_3d[:, :, split_posi-1] = 0
+        mask_3d[:, split_posi-1, split_posi-1] = 1
 
         if manip_type == 0:
             pass
@@ -342,7 +332,7 @@ class CustomizedEncoderV2(PreTrainedModel):
 
         elif manip_type == 4:
             # 每个模块之间不直接进行交互
-            mask_3d[:, : split_posi - 1, split_posi - 1 :] = 0
+            mask_3d[:, : split_posi -1, split_posi -1:] = 0 # xiugai 
             mask_3d[:, split_posi :, : split_posi] = 0
         
         elif manip_type == 5:
@@ -364,10 +354,11 @@ class CustomizedEncoderV2(PreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         key_ids: Optional[torch.Tensor] = None,
+        split_posi: Optional[int] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_token_scores: Optional[bool] = None,
-        return_dict: Optional[bool] = None
+        return_dict: Optional[bool] = None,
         ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -412,21 +403,17 @@ class CustomizedEncoderV2(PreTrainedModel):
         router_type = 2,
     ):
         input_shape = features.size()[:-1]
-        split_pos = input_shape[1] // 2 + 1
+        split_pos = input_shape[1] // 2 + 1 
         word_count = torch.sum(org_mask, dim=-1, keepdim=True)
         if not layer.use_router:
-            return 0, torch.mean(attention_prob, dim=1)[:, 0] * word_count #torch.ones_like(org_mask)#
+            return 0, torch.mean(attention_prob, dim=1)[:, 0] * word_count
         
         if router_type == 0:
             mask = org_mask.clone()
-            mask[:, split_pos - 1:] = 0
-            word_count = torch.sum(mask, dim=-1, keepdim=True)
-            m = layer.Router(features, mask, condition=features[:, split_pos:split_pos+1])
+            mask[:, split_pos-1:] = 0
+            m = layer.Router(features, mask, features[:, split_pos:split_pos+1])
             s = m * word_count
-
-        elif router_type == 1:
-            pass
-
+    
         elif router_type == 2:
             m = torch.mean(torch.mean(attention_prob, dim=1), dim=1)
             s = m * word_count
@@ -435,9 +422,16 @@ class CustomizedEncoderV2(PreTrainedModel):
             attention_mask = self.manip_attention_mask(org_mask, split_pos, manip_type=self.attn_type_2)
             attention_prob = F.softmax(attention_score + attention_mask, dim=-1)
             m = torch.mean(attention_prob, dim=1)[:, split_pos].clone()
+            word_count = torch.sum(org_mask[:, :split_pos-1], dim=-1, keepdim=True) # 新加
             m[:, split_pos - 1:] = 0
             m /= torch.sum(m, dim=-1, keepdim=True)
             s = m  * word_count
+        
+        elif router_type == 4:
+            query = features[:, split_pos]
+            weight = torch.einsum("bd, bld ->bl", [query, features]) / math.sqrt(query.shape[-1])
+            m = F.softmax(weight+attention_mask[:, 0, 0, :], dim=-1)
+            s = m * word_count
 
         return m.unsqueeze(-1), s
 
@@ -445,10 +439,14 @@ class CustomizedEncoderV2(PreTrainedModel):
 def create_position_ids_from_input_ids(input_ids, padding_idx, split_pos=None):
     if split_pos is not None:
         tem = input_ids.clone()
+        pre_mask = tem.ne(padding_idx).int()
         tem[:, split_pos] = 1
         mask = tem.ne(padding_idx).int()
-        incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask)) * mask
-        incremental_indices[:, split_pos] = incremental_indices[:, split_pos+1] - 1
+        incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask))
+        value = incremental_indices[:, split_pos+1] - 1
+        incremental_indices[:, split_pos] = value
+        incremental_indices[:, split_pos:] -= value.unsqueeze(-1)-1
+        incremental_indices *= pre_mask
     else:
         mask = input_ids.ne(padding_idx).int()
         incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask)) * mask

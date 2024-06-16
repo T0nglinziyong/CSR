@@ -1,6 +1,8 @@
 output/
 figures/
+wandb/
 simcse-base/
+diffcse-roberta-base-sts/
 loop.sh
 test_prediction_2.json
 test_prediction.json
