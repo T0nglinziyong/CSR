@@ -1,11 +1,8 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
-from typing import Union, Tuple, Optional, List
-from transformers.models.bert.modeling_bert import BertSelfAttention
 from .utils import *
 import math
-
 
 class MultiHeadLinear(nn.Module):
     def __init__(self, hidden_size, num_heads, num_experts, dropout=0.1):
@@ -67,7 +64,6 @@ class SelecterTopk(nn.Module):
 
         return result_tensor#, transposed_matrix.to(torch.float)
     
-
 class Normalizer(nn.Module):
     def __init__(self, theta=0.3, theta0=4, T=20, beta=0.7, k=None, p=None, temperature=1) -> None:
         super(Normalizer, self).__init__()
@@ -115,7 +111,6 @@ class Normalizer(nn.Module):
 
         return gamma
     
-
 class ScorerV1(nn.Module):
     def __init__(self, hidden_size, temperature=1, nheads=1, use_condition=False, use_position=False, sent_transform=False) -> None:
         super(ScorerV1, self).__init__()
@@ -156,7 +151,6 @@ class ScorerV1(nn.Module):
         score = Normalizer(k=1, theta=0)(score, mask)
         return score
     
-
 class ScorerV2(nn.Module):
     def __init__(self, hidden_size):
         super(ScorerV2, self).__init__()
@@ -168,7 +162,6 @@ class ScorerV2(nn.Module):
         score = self.bilinear(sentence * condition * self.temperature).squeeze()
         score = self.nomalize(score, mask)
         return score
-
 
 class RouterBase(nn.Module):
     def __init__(self, hidden_size, temperature=1, k=10, p=None,
@@ -182,8 +175,6 @@ class RouterBase(nn.Module):
         m = self.select(score)
         return m
     
-    
-
 class HyperNetwork(nn.Module):
     def __init__(self, input_size, hidden_size):
         super().__init__()

@@ -20,9 +20,7 @@ class CustomizedEncoder(PreTrainedModel):
         self.rout_start = config.routing_start
         self.rout_end = config.routing_end
         self.router_type = config.router_type
-
-        hidden_size = config.hidden_size
-
+        
         backbone = AutoModel.from_pretrained(
             config.model_name_or_path,
             from_tf=bool('.ckpt' in config.model_name_or_path),

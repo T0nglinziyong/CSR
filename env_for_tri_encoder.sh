@@ -1,12 +1,11 @@
 #!/bin/bash
 export MODEL=princeton-nlp/sup-simcse-roberta-large  #./simcse-base #./diffcse-roberta-base-sts #
-export ENCODER_TYPE=bi_encoder
+export ENCODER_TYPE=tri_encoder
 export OBJECTIVE=mse #triplet_mse # classification # 
 export TRIENCODER_HEAD=hadamard
 export NUM_LABELS=1
 
 export TRANSFORM=True
-export USE_CONDITION=True # 在使用router_type0时有用，可暂时忽略
 export ROUT_START=24 # router开始的层数
 export ROUT_END=24 # router结束的层数
 export ROUTER_TYPE=3 # 0-1: use additional router; 2-3 use attention score provided by self-attention

@@ -358,8 +358,10 @@ class ModelArguments:
 
     def __post_init__(self):
         assert self.temperature > 0
-        flag = self.use_condition.lower()
-        self.use_condition = True if flag == "true" else False if flag == "false" else None
+        self.my_encoder_type = 1
+        if self.routing_start != self.routing_end and self.encoding_type == "tri_encoder":
+            self.encoding_type = "bi_encoder"
+            self.my_encoder_type = 2
 
 
 def get_parser():
@@ -497,6 +499,7 @@ def get_model_and_tokenizer(model_args):
             "model_revision": model_args.model_revision,
             "cache_dir": model_args.cache_dir,
             "model_name_or_path": model_args.model_name_or_path,
+            "my_encoder_type": model_args.my_encoder_type,
             "objective": model_args.objective,
             "pooler_type": model_args.pooler_type,
             "transform": model_args.transform,
@@ -607,7 +610,8 @@ def main():
                 f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
                 "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
             )
-    
+
+    set_seed(training_args.seed)
     # Padding strategy
     padding = "max_length" if data_args.pad_to_max_length else False
     
@@ -716,7 +720,7 @@ def main():
             combined.update(metrics)
             trainer.save_metrics("train", combined)
     
-    if training_args.show_example is not None:
+    if training_args.show_example is not None and model_args.encoding_type == "bi_encoder":
         show_examples_from_my_encoder(trainer, eval_dataset, tokenizer, training_args.show_example, training_args.output_dir) 
     
     if training_args.do_predict:
@@ -725,7 +729,9 @@ def main():
         predict_dataset = predict_dataset.remove_columns("labels")
         predictions = trainer.predict(
             predict_dataset, metric_key_prefix="predict"
-        ).predictions[0]
+        ).predictions
+        if isinstance(predictions, tuple):
+            predictions = predictions[0]
         predictions = (
             np.squeeze(predictions)
             if model_args.objective in objective_set

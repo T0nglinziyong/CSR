@@ -16,7 +16,7 @@ def get_preprocessing_function(
         sentences_only=False,
         ):
     'Returns a the preprocessing function for each encoding type'
-    if model_args.encoding_type == 'bi_encoder':
+    if model_args.encoding_type in ['bi_encoder']:
         if condition_only or sentences_only:
             raise ValueError('condition_only and sentences_only doesn\'t apply to bi_encoder')
         def preprocess_function(examples):
@@ -63,6 +63,7 @@ def get_preprocessing_function(
                         raise ValueError(f'Label {label} is not in the range [{_min}, {_max}]')
                 sent1_result['labels'] = scale_to_range(sent1_result['labels'], _min, _max)
             return sent1_result
+        
     elif model_args.encoding_type == 'cross_encoder':
         def preprocess_function(examples):
             if condition_only:
@@ -80,6 +81,7 @@ def get_preprocessing_function(
                         raise ValueError(f'Label {label} is not in the range [{_min}, {_max}]')
                 result['labels'] = scale_to_range(result['labels'], _min, _max)
             return result
+        
     elif model_args.encoding_type == 'tri_encoder':
         if condition_only or sentences_only:
             raise ValueError('condition_only and sentences_only doesn\'t apply to tri_encoder')

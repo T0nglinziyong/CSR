@@ -55,13 +55,9 @@ class Pooler(nn.Module):
 class EncoderOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    logits_map: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-
 
 @dataclass
-class ConditionEncoderOutput(ModelOutput):
+class CrossConditionEncoderOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
     token_scores: Optional[Tuple[torch.FloatTensor, ...]] = None

@@ -48,9 +48,9 @@ def main(email, predictions_file, name=None):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Send email and predictions to server')
-    parser.add_argument('email', type=str, help='The email to be sent')
-    parser.add_argument('predictions_file', type=str, help='The path to the JSON file containing the predictions')
-    parser.add_argument('--name', type=str, help='The name of the submission. Uses the filename if not specified')
-    args = parser.parse_args()
-    main(args.email, args.predictions_file)
+    #parser = argparse.ArgumentParser(description='Send email and predictions to server')
+    #parser.add_argument('email', type=str, help='The email to be sent')
+    #parser.add_argument('predictions_file', type=str, help='The path to the JSON file containing the predictions')
+    #parser.add_argument('--name', type=str, help='The name of the submission. Uses the filename if not specified')
+    #args = parser.parse_args()
+    main("969378888@qq.com", "test_prediction.json")

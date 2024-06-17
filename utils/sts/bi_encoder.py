@@ -10,21 +10,17 @@ from .routing import *
 from transformers.activations import ACT2FN
 from transformers import PreTrainedModel
 import logging
-import time
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s: %(message)s')
 
 logger = logging.getLogger(__name__)
-# globals.py
-shared_data = {
-    'total_time': 0
-}
 
 class BiEncoderForClassification_(PreTrainedModel):
     '''Encoder model with backbone and classification head.'''
     def __init__(self, config):
         super().__init__(config)
-        self.backbone = CustomizedEncoderV2(config)
+        self.backbone = CustomizedEncoder(config) if config.my_encoder_type == 1 \
+                    else CustomizedEncoderV2(config)
         '''self.backbone = AutoModel.from_pretrained(
             config.model_name_or_path,
             from_tf=bool('.ckpt' in config.model_name_or_path),
@@ -162,7 +158,6 @@ class BiEncoderForClassification_(PreTrainedModel):
                 loss = self.loss_fct_cls(**self.loss_fct_kwargs)(logits, labels)
             if key_ids is not None and labels is not None:
                 loss += RankingLoss(margin=self.margin)(outputs.token_scores[self.layer_score], key_ids, attention_mask)
-        
         return BiConditionEncoderOutput(
             loss=loss,
             logits=logits,

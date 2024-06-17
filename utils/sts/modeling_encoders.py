@@ -2,7 +2,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn.functional import cosine_similarity
-
+from .utils import *
 from transformers.activations import ACT2FN
 from transformers.modeling_outputs import (
     SequenceClassifierOutput,
@@ -145,11 +145,9 @@ class CrossEncoderForClassification(PreTrainedModel):
         loss = None
         if labels is not None:
             loss = self.loss_fct_cls()(reshaped_logits, labels.view(-1))
-        return SequenceClassifierOutput(
+        return EncoderOutput(
             loss=loss,
             logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
         )
 
   
@@ -250,7 +248,7 @@ class BiEncoderForClassification(PreTrainedModel):
             logits = cosine_similarity(features_1, features_2, dim=1)
             if labels is not None:
                 loss = self.loss_fct_cls(**self.loss_fct_kwargs)(logits, labels)
-        return SequenceClassifierOutput(
+        return EncoderOutput(
             loss=loss,
             logits=logits,
         )
@@ -394,7 +392,7 @@ class TriEncoderForClassification(PreTrainedModel):
             logits = cosine_similarity(features_1, features_2, dim=1)
             if labels is not None:
                 loss = self.loss_fct_cls(**self.loss_fct_kwargs)(logits, labels)
-        return SequenceClassifierOutput(
+        return EncoderOutput(
             loss=loss,
             logits=logits,
         )

@@ -3,10 +3,8 @@ import torch.utils.checkpoint
 from torch import nn
 import torch.nn.functional as F
 from typing import Union, Tuple, Optional
-from transformers.modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
 from transformers import PreTrainedModel, AutoModel
 import math
-#from .attn_dropout import *
 from .routing import *
 from .utils import *
 # tri-encoder 和 bi-encoder在架构上的细微区别
@@ -16,7 +14,7 @@ class CustomizedEncoderV2(PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
-        assert config.attn_type == 4 and config.attn_type_2 is not None and config.attn_type_2 != 4
+        assert config.mask_type == 4 and config.mask_type_2 is not None and config.mask_type_2 != 4
         self.attn_type = config.mask_type
         self.attn_type_2 = config.mask_type_2
 
@@ -248,7 +246,7 @@ class CustomizedEncoderV2(PreTrainedModel):
         output_token_scores: Optional[bool] = False,
         return_dict: Optional[bool] = True,
         org_mask=None
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> Union[Tuple[torch.Tensor], MyEncoderOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
         all_token_scores = () if output_token_scores else None
