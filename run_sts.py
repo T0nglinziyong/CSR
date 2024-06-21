@@ -30,6 +30,7 @@ from utils.sts.triplet_trainer import TripletTrainer
 from utils.visualize_attention import visual_score
 
 import pandas as pd
+import wandb
 import os   
 
 logging.basicConfig(
@@ -90,13 +91,24 @@ class TrainingArguments(HFTrainingArguments):
             )
         },
     )
-    show_example: Optional[int] = field(
-        default=None, metadata={}
-    )
 
-    load_best_model_at_end: bool = field(default=True,)
-    metric_for_best_model: Optional[str] = field(default="eval_spearmanr",)
-    greater_is_better: bool = field(default=True,)
+    
+    num_show_examples: int = field(default=8)
+    load_best_model_at_end: bool = field(default=True)
+    metric_for_best_model: Optional[str] = field(default="eval_spearmanr")
+    greater_is_better: bool = field(default=True)
+
+
+    report_to: Optional[str] = field(default="wandb")
+    wandb_mode: Optional[str] = field(default="online")
+
+    project_name: Optional[str] = field(default="c-sts")
+    entity_name: Optional[str] = field(default=None)
+    run_name: Optional[str] = field(default="tem")
+    group_name: Optional[str] = field(default="baseline")
+
+    logging_steps: int = field(default=10,)
+
 
 
 @dataclass
@@ -544,9 +556,10 @@ def get_trainer(model, tokenizer, model_args, data_args, training_args, train_da
     return trainer
 
 
-def show_examples_from_my_encoder(trainer, train_dataset, tokenizer, num_example, path):
+def show_examples_from_my_encoder(trainer, train_dataset, tokenizer, num_example, path, seed=None):
     logger.info("*** Showing Examples ***")
 
+    random.seed(seed)
     sample_ids = random.sample(range(len(train_dataset)), num_example)
     samples = train_dataset.select(sample_ids)
     predictions = trainer.predict(samples.remove_columns("labels")).predictions
@@ -559,8 +572,12 @@ def show_examples_from_my_encoder(trainer, train_dataset, tokenizer, num_example
         zip(range(len(samples['input_ids'])), samples["input_ids"], samples["input_ids_2"], samples["input_ids_3"], samples['labels'],
                 predictions[0], predictions[-2], predictions[-1], 
                 ): 
-        visual_score(input_ids_3,input_ids_1, attention_1, split_posi, tokenizer, 2*id, fig_path, label, predict)
-        visual_score(input_ids_3,input_ids_2, attention_2, split_posi, tokenizer, 2*id+1, fig_path, label, predict)
+        fig_name_1 = f'token_score_{2*id}.png'
+        fig_name_2 = f'token_score_{2*id+1}.png'
+        visual_score(input_ids_3,input_ids_1, attention_1, split_posi, tokenizer, fig_path, fig_name_1, label, predict)
+        visual_score(input_ids_3,input_ids_2, attention_2, split_posi, tokenizer, fig_path, fig_name_2, label, predict)
+        wandb.log({fig_name_1: wandb.Image(os.path.join(fig_path, fig_name_1), caption=fig_name_1)})
+        wandb.log({fig_name_2: wandb.Image(os.path.join(fig_path, fig_name_2), caption=fig_name_2)})
         print(f'------------------sample {id}--------------------')
         try:
             print(f"condition: {tokenizer.decode(input_ids_3)}        key: {samples[id]['condition_key']}")
@@ -575,10 +592,20 @@ def show_examples_from_my_encoder(trainer, train_dataset, tokenizer, num_example
             print(f"sentence1: {tokenizer.decode(input_ids_1)}")
             print(f"sentence2: {tokenizer.decode(input_ids_2)}")
             print(f"label: {label}, prediction: {predict}")
+            
 
 
 def main():
     model_args, data_args, training_args = get_parser()
+
+    wandb.init(
+        project=training_args.project_name, 
+        entity=training_args.entity_name, 
+        name=training_args.run_name, 
+        group=training_args.group_name,
+        mode=training_args.wandb_mode,
+        notes=None,
+    )
 
     model, tokenizer = get_model_and_tokenizer(model_args)
     
@@ -603,6 +630,7 @@ def main():
             )
 
     set_seed(training_args.seed)
+
     # Padding strategy
     padding = "max_length" if data_args.pad_to_max_length else False
     
@@ -711,8 +739,9 @@ def main():
             combined.update(metrics)
             trainer.save_metrics("train", combined)
     
-    if training_args.show_example is not None and model_args.encoding_type == "bi_encoder":
-        show_examples_from_my_encoder(trainer, eval_dataset, tokenizer, training_args.show_example, training_args.output_dir) 
+    if training_args.num_show_examples > 0 and model_args.encoding_type == "bi_encoder":
+        show_examples_from_my_encoder(trainer, eval_dataset, tokenizer, training_args.num_show_examples, 
+                                      training_args.output_dir, training_args.seed) 
     
     if training_args.do_predict:
         logger.info("*** Predict ***")

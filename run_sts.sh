@@ -71,8 +71,10 @@ python run_sts.py \
   --data_seed ${seed} \
   --fp16 True \
   --log_time_interval 15 \
-  --overwrite_output_dir False\
-  --show_example 8 \
+  --overwrite_output_dir False \
+  --num_show_examples 8 \
+  --run_name tem \
+  --group_name baseline \
   --mask_type ${mask_type} \
   --mask_type_2 ${mask_type_2} \
   --routing_start ${routing_start} \
