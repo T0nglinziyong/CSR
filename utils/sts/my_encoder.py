@@ -43,8 +43,7 @@ class CustomizedEncoder(PreTrainedModel):
         self.pooler = None
 
         for i, layer in enumerate(self.encoder):
-            layer.use_router = (i >= self.rout_start) and (i < self.rout_end) 
-
+            layer.use_router = (i >= self.rout_start) and (i < self.rout_end)
         if self.router_type < 2:
             for i in range(self.rout_start, self.rout_end):
                 self.encoder[i].add_module("Router", 
@@ -204,7 +203,6 @@ class CustomizedEncoder(PreTrainedModel):
             org_mask=org_mask, 
             router_type=self.router_type
         )
-
         conditional_output = self_output * m#self.router_forward(layer, hidden_states, attention_mask, self_output, org_mask) * m #* key_ids.unsqueeze(-1)
         attention_output = attention.output(self_output + conditional_output, hidden_states)# linear + dropout + layernorm
         outputs = (attention_output,) + self_outputs[2:]  + (token_score,) # add attentions if we output them
@@ -414,8 +412,8 @@ class CustomizedEncoder(PreTrainedModel):
             word_count = torch.sum(org_mask[:, :split_pos-1], dim=-1, keepdim=True)
             m /= torch.sum(m, dim=-1, keepdim=True)
             s = m  * word_count
-            m = torch.clamp(m - 1/ word_count, min=0)
-            m /= torch.sum(m, dim=-1, keepdim=True)
+            #m = torch.clamp(m - 1/ word_count, min=0)
+            #m /= torch.sum(m, dim=-1, keepdim=True)
 
         elif router_type == 4:
             prob = torch.mean(attention_prob, dim=1).clone()

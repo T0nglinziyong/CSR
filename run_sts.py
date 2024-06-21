@@ -5,7 +5,6 @@ import random
 import sys
 from dataclasses import dataclass, field
 from typing import Optional
-import torch
 import datasets
 from datasets import Dataset
 import numpy as np
@@ -32,13 +31,8 @@ from utils.sts.triplet_trainer import TripletTrainer
 from utils.visualize_attention import visual_score
 
 from make_test_submission import main as submission
-from matplotlib import pyplot as plt
-import torch.nn.functional as F
 import pandas as pd
-import seaborn as sns
 import os   
-import csv
-import time
 
 os.environ["WANDB_DISABLED"] = "true"
 logging.basicConfig(
