@@ -10,7 +10,6 @@ from datasets import Dataset
 import numpy as np
 import transformers
 from datasets import load_dataset, concatenate_datasets
-from torch.utils.data import DataLoader
 from scipy.stats import pearsonr, spearmanr
 from transformers import (
     AutoConfig,
@@ -30,11 +29,9 @@ from utils.sts.modeling_utils import DataCollatorWithPadding, get_model
 from utils.sts.triplet_trainer import TripletTrainer
 from utils.visualize_attention import visual_score
 
-from make_test_submission import main as submission
 import pandas as pd
 import os   
 
-os.environ["WANDB_DISABLED"] = "true"
 logging.basicConfig(
     level=logging.INFO, 
     format="%(asctime)s - %(name)s - %(levelname)s: %(message)s",
@@ -748,4 +745,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    #submission(email_address, test_predict_file)
