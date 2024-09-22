@@ -6,7 +6,7 @@ export TRIENCODER_HEAD=None
 export NUM_LABELS=1
 
 export TRANSFORM=True
-export ROUT_START=24 # router开始的层数
+export ROUT_START=23 # router开始的层数
 export ROUT_END=24 # router结束的层数
 export MASK_TYPE=4
 export SEED=45

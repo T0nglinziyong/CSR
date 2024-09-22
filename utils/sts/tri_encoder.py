@@ -6,7 +6,6 @@ from .utils import *
 from transformers.activations import ACT2FN
 from transformers import PreTrainedModel, AutoModel
 import logging
-from transformers.models.roberta.modeling_roberta import RobertaLayer, RobertaAttention
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s: %(message)s')
 
 logger = logging.getLogger(__name__)
@@ -27,6 +26,7 @@ class TriEncoderForClassification_(PreTrainedModel):
             use_auth_token=True if config.use_auth_token else None,
             add_pooling_layer=False,
         ).base_model
+        self.layer_score = -1
         self.triencoder_head = config.triencoder_head
         classifier_dropout = (
                 config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
@@ -102,23 +102,25 @@ class TriEncoderForClassification_(PreTrainedModel):
         head_mask = concat_features(head_mask, head_mask_2)
         inputs_embeds = concat_features(inputs_embeds, inputs_embeds_2)
 
-        features_ = self.backbone(
+        conditions = self.backbone(
             input_ids=input_ids_3,
             attention_mask=attention_mask_3,
+            output_attentions=True,
             output_hidden_states=True
             ).hidden_states
         
         attention_mask = torch.cat([attention_mask_3.repeat(2, 1), attention_mask], dim=1)
 
-        features = self.backbone(
+        outputs = self.backbone(
             input_ids=input_ids,
             attention_mask=self.manip_attention_mask(attention_mask, seq_length),
-            past_key_values=[feature_.repeat(2, 1, 1) for feature_ in features_[:-1]],
+            past_key_values=[condition.repeat(2, 1, 1) for condition in conditions[:-1]],
+            output_token_scores=True
             )
         
-        features = self.pooler(attention_mask, features)
+        features = self.pooler(attention_mask, outputs)
         features_1, features_2 = torch.split(features, bsz, dim=0)
-        features_3 = features_[-1][:, 0]
+        features_3 = conditions[-1][:, 0]
 
         loss = None
         if self.transform is not None:
@@ -150,9 +152,12 @@ class TriEncoderForClassification_(PreTrainedModel):
             logits = cosine_similarity(features_1, features_2, dim=1)
             if labels is not None:
                 loss = self.loss_fct_cls(**self.loss_fct_kwargs)(logits, labels)
+
         return ConditionEncoderOutput(
             loss=loss,
             logits=logits,
+            token_scores=outputs.token_scores[self.layer_score][:bsz],
+            token_scores_2=outputs.token_scores[self.layer_score][bsz:],
         )
     
     def manip_attention_mask(self, mask, qlen=None):
@@ -166,3 +171,13 @@ class TriEncoderForClassification_(PreTrainedModel):
         mask_3d[:, 1:, :split_posi] = 0
         return mask_3d#self.get_extended_attention_mask(mask_3d, (bsz, qlen))
 
+
+def init_model_config(model, config):
+    model.attn_type = config.mask_type
+
+    model.rout_start = config.routing_start
+    model.rout_end = config.routing_end
+    model.router_type = config.router_type
+
+    for i, layer in enumerate(model.encoder):
+        layer.use_router = (i >= model.rout_start) and (i < model.rout_end) 

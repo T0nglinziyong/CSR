@@ -495,16 +495,17 @@ def get_trainer(model, tokenizer, model_args, data_args, training_args, train_da
     return trainer
 
 
-def show_examples_from_my_encoder(trainer, train_dataset, tokenizer, num_example, path, seed=None):
+def show_examples_from_my_encoder(trainer, train_dataset, tokenizer, training_args):
     logger.info("*** Showing Examples ***")
 
-    random.seed(seed)
+    random.seed(training_args.seed)
+    num_example = training_args.num_show_examples
     sample_ids = random.sample(range(len(train_dataset)), num_example)
     samples = train_dataset.select(sample_ids)
     predictions = trainer.predict(samples.remove_columns("labels")).predictions
 
     split_posi = len(predictions[-1][0]) // 2 + 1
-    fig_path = path + "/figures/"
+    fig_path =  training_args.output_dir + "/figures/"
 
     for id, input_ids_1, input_ids_2, input_ids_3, label, predict, attention_1, attention_2  in \
         zip(range(num_example), samples["input_ids"], samples["input_ids_2"], samples["input_ids_3"],
@@ -642,10 +643,8 @@ def main():
             combined.update(metrics)
             trainer.save_metrics("train", combined)
     
-    if training_args.num_show_examples > 0 and model_args.encoding_type == "bi_encoder":
-        show_examples_from_my_encoder(trainer, eval_dataset, tokenizer, 
-                                      training_args.num_show_examples, 
-                                      training_args.output_dir, training_args.seed) 
+    if training_args.num_show_examples > 0:
+        show_examples_from_my_encoder(trainer, eval_dataset, tokenizer, training_args) 
     
     if training_args.do_predict:
         logger.info("*** Predict ***")
