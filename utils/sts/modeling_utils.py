@@ -1,5 +1,6 @@
-from .modeling_encoders import BiEncoderForClassification, CrossEncoderForClassification, TriEncoderForClassification
+from .modeling_encoders import BiEncoderForClassification, CrossEncoderForClassification#, TriEncoderForClassification
 from .bi_encoder import BiEncoderForClassification_
+from .tri_encoder import TriEncoderForClassification
 import torch
 import numpy as np
 from dataclasses import dataclass

@@ -71,7 +71,7 @@ python run_sts.py \
   --data_seed ${seed} \
   --fp16 True \
   --log_time_interval 15 \
-  --overwrite_output_dir False \
+  --overwrite_output_dir True \
   --num_show_examples 8 \
   --run_name tem \
   --group_name baseline \

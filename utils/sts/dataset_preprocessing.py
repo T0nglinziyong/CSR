@@ -16,7 +16,7 @@ def get_preprocessing_function(
         sentences_only=False,
         ):
     'Returns a the preprocessing function for each encoding type'
-    if model_args.encoding_type in ['bi_encoder']:
+    if model_args.encoding_type in ['bi_encoder', 'tri_encoder']:
         if condition_only or sentences_only:
             raise ValueError('condition_only and sentences_only doesn\'t apply to bi_encoder')
         def preprocess_function(examples):

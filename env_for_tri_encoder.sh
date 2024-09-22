@@ -6,7 +6,7 @@ export TRIENCODER_HEAD=hadamard
 export NUM_LABELS=1
 
 export TRANSFORM=True
-export ROUT_START=23 # router开始的层数
+export ROUT_START=24 # router开始的层数
 export ROUT_END=24 # router结束的层数
 export ROUTER_TYPE=3 # 0-1: use additional router; 2-3 use attention score provided by self-attention
 export MASK_TYPE=4

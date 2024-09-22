@@ -5,7 +5,6 @@ from transformers import TrainerCallback
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn.functional import cosine_similarity, sigmoid
 from typing import Union, Tuple, Optional
 from dataclasses import dataclass
 from transformers.utils import ModelOutput

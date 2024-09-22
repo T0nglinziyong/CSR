@@ -93,7 +93,6 @@ class CustomizedEncoderV2(PreTrainedModel):
         )
 
         extended_attention_mask = self.manip_attention_mask(attention_mask, manip_type=self.attn_type)
-
         return embedding_output, extended_attention_mask, attention_mask, head_mask
         
     def self_attention(
