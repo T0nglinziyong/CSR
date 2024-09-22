@@ -19,8 +19,7 @@ class BiEncoderForClassification_(PreTrainedModel):
     '''Encoder model with backbone and classification head.'''
     def __init__(self, config):
         super().__init__(config)
-        self.backbone = CustomizedEncoder(config) if config.my_encoder_type == 1 \
-                    else CustomizedEncoderV2(config)
+        self.backbone = CustomizedEncoder(config) # CustomizedEncoderV2(config)
         '''self.backbone = AutoModel.from_pretrained(
             config.model_name_or_path,
             from_tf=bool('.ckpt' in config.model_name_or_path),
@@ -31,8 +30,9 @@ class BiEncoderForClassification_(PreTrainedModel):
             add_pooling_layer=False,
         ).base_model'''
 
-        self.margin = config.margin
-        self.layer_score = config.routing_end - 1 if config.layer_score is None else config.layer_score
+        # self.margin = config.margin
+        # self.layer_score = config.routing_end - 1 if config.layer_score is None else config.layer_score
+        self.layer_score = -1
         self.triencoder_head = config.triencoder_head
 
         classifier_dropout = (
@@ -119,7 +119,7 @@ class BiEncoderForClassification_(PreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            key_ids=key_ids,
+            #key_ids=key_ids,
             output_hidden_states=self.output_hidden_states,
             output_attentions=False,
             output_token_scores=True,
@@ -128,7 +128,7 @@ class BiEncoderForClassification_(PreTrainedModel):
         features, features_c = torch.split(features, split_posi, dim=1)
         attention_mask, attention_mask_c = torch.split(attention_mask, split_posi, dim=1)
         
-        features = self.pooler(attention_mask, last_hidden=features_c)
+        features = self.pooler(attention_mask, last_hidden=features)
         features_c = self.pooler(attention_mask_c, last_hidden=features_c)
 
         if self.transform is not None:
@@ -156,9 +156,9 @@ class BiEncoderForClassification_(PreTrainedModel):
             logits = cosine_similarity(features_1, features_2, dim=1)
             if labels is not None:
                 loss = self.loss_fct_cls(**self.loss_fct_kwargs)(logits, labels)
-            if key_ids is not None and labels is not None:
-                loss += RankingLoss(margin=self.margin)(outputs.token_scores[self.layer_score], key_ids, attention_mask)
-        return BiConditionEncoderOutput(
+            # if key_ids is not None and labels is not None:
+            #     loss += RankingLoss(margin=self.margin)(outputs.token_scores[self.layer_score], key_ids, attention_mask)
+        return ConditionEncoderOutput(
             loss=loss,
             logits=logits,
             token_scores=outputs.token_scores[self.layer_score][:bsz],

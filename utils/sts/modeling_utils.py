@@ -1,6 +1,5 @@
-from .modeling_encoders import BiEncoderForClassification, CrossEncoderForClassification#, TriEncoderForClassification
 from .bi_encoder import BiEncoderForClassification_
-from .tri_encoder import TriEncoderForClassification
+from .tri_encoder import TriEncoderForClassification_
 import torch
 import numpy as np
 from dataclasses import dataclass
@@ -38,14 +37,9 @@ class DataCollatorWithPadding:
             out_features = {key: np.array(value) for key, value in out_features.items()}
         return out_features
 
-
-
-
 def get_model(model_args):
     if model_args.encoding_type == 'bi_encoder':
         return BiEncoderForClassification_
-    if model_args.encoding_type == 'cross_encoder':
-        return CrossEncoderForClassification
     if model_args.encoding_type == 'tri_encoder':
-        return TriEncoderForClassification
+        return TriEncoderForClassification_
     raise ValueError(f'Invalid model type: {model_args.encoding_type}')

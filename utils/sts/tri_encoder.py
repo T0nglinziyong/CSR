@@ -4,9 +4,6 @@ from torch import nn
 from torch.nn.functional import cosine_similarity
 from .utils import *
 from transformers.activations import ACT2FN
-from transformers.modeling_outputs import (
-    SequenceClassifierOutput,
-)
 from transformers import PreTrainedModel, AutoModel
 import logging
 from transformers.models.roberta.modeling_roberta import RobertaLayer, RobertaAttention
@@ -18,7 +15,7 @@ def concat_features(*features):
     return torch.cat(features, dim=0) if features[0] is not None else None
 
 
-class TriEncoderForClassification(PreTrainedModel):
+class TriEncoderForClassification_(PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.backbone = AutoModel.from_pretrained(
@@ -105,32 +102,24 @@ class TriEncoderForClassification(PreTrainedModel):
         head_mask = concat_features(head_mask, head_mask_2)
         inputs_embeds = concat_features(inputs_embeds, inputs_embeds_2)
 
+        features_ = self.backbone(
+            input_ids=input_ids_3,
+            attention_mask=attention_mask_3,
+            output_hidden_states=True
+            ).hidden_states
+        
+        attention_mask = torch.cat([attention_mask_3.repeat(2, 1), attention_mask], dim=1)
+
         features = self.backbone(
             input_ids=input_ids,
-            attention_mask=attention_mask,
-            output_hidden_states=True
+            attention_mask=self.manip_attention_mask(attention_mask, seq_length),
+            past_key_values=[feature_.repeat(2, 1, 1) for feature_ in features_[:-1]],
             )
         
-        attention_mask_3 = torch.cat([attention_mask, attention_mask_3.repeat(2, 1)], dim=1)
-        input_ids_3 = input_ids_3.repeat(2, 1)
-        
-        features = self.backbone(
-            input_ids=input_ids_3,
-            attention_mask=self.manip_attention_mask(attention_mask_3, seq_length),
-            past_key_values=features.hidden_states[:-1],
-            )
-        # features = outputs.last_hidden_state
-        # features = self.transpose(features)
-        # attention_mask = self.transpose(attention_mask)
-        # features = self.router(features, self.manip_attention_mask(attention_mask))[0]
         features = self.pooler(attention_mask, features)
-        #features_2 = self.pooler(attention_mask_2, features_2)
-        # features_1, features_2, features_3 = torch.split(features, bsz, dim=0)
-        #features_3 = self.condition_transform(condition[0][:, 0])
         features_1, features_2 = torch.split(features, bsz, dim=0)
-        features_3 = 1
-        
-        # do we need positional embeddings?
+        features_3 = features_[-1][:, 0]
+
         loss = None
         if self.transform is not None:
             features_1 = self.transform(features_1)
@@ -161,19 +150,10 @@ class TriEncoderForClassification(PreTrainedModel):
             logits = cosine_similarity(features_1, features_2, dim=1)
             if labels is not None:
                 loss = self.loss_fct_cls(**self.loss_fct_kwargs)(logits, labels)
-        return EncoderOutput(
+        return ConditionEncoderOutput(
             loss=loss,
             logits=logits,
         )
-    
-    def transpose(self, features):
-        bsz = features.shape[0] // 3
-        features_3 = features[bsz*2:]
-        features_3 = torch.cat([features_3, features_3], dim=0)
-        
-        features = features[:bsz*2]
-        features = torch.cat([features, features_3], dim=1)
-        return features
     
     def manip_attention_mask(self, mask, qlen=None):
         bsz, slen = mask.shape

@@ -8,12 +8,7 @@ transform=${TRANSFORM:-False}  # whether to use an additional linear layer after
 routing_start=${ROUT_START:--4} # where to start using routing
 routing_end=${ROUT_END:-24} # where to end using routing
 router_type=${ROUTER_TYPE:-3}
-temperature=${TEMPERATURE:-1}
 mask_type=${MASK_TYPE:-0} # mask type: 0-5
-mask_type_2=${MASK_TYPE_2:-4}
-use_supervision=${USE_SUPER:-False}
-layer_super=${LAYER_SUPER:--1}
-margin=${MARGIN:-0.1}
 objective=${OBJECTIVE:-mse}  # mse, triplet, triplet_mse
 
 triencoder_head=${TRIENCODER_HEAD:-None}  # hadamard, concat (set for tri_encoder)
@@ -24,14 +19,10 @@ basic_config=model_${model//\//__}__enc_${encoding}
 if [ "$routing_start" == "$routing_end" ]; then
     config=trans_${transform}__obj_${objective}__mask_${mask_type}
 else
-    config=trans_${transform}__obj_${objective}__from_${routing_start}_to_${routing_end}__mask_${mask_type}_${mask_type_2}
+    config=trans_${transform}__obj_${objective}__from_${routing_start}_to_${routing_end}__mask_${mask_type}
 fi
+config=${config}__lr_${lr}__wd_${wd}__s_${seed}
 
-if [ "$use_supervision" == "True" ]; then
-    config=${config}__sup_${layer_super}_margin_${margin}_lr_${lr}__wd_${wd}__s_${seed}
-else
-    config=${config}__lr_${lr}__wd_${wd}__s_${seed}
-fi
 train_file=${TRAIN_FILE:-data/csts_train.csv}
 eval_file=${EVAL_FILE:-data/csts_validation.csv}
 test_file=${TEST_FILE:-data/csts_test.csv}
@@ -73,16 +64,12 @@ python run_sts.py \
   --log_time_interval 15 \
   --overwrite_output_dir True \
   --num_show_examples 8 \
-  --run_name tem \
-  --group_name baseline \
+  --load_best_model_at_end True \
+  --metric_for_best_model eval_spearmanr \
+  --greater_is_better True \
   --mask_type ${mask_type} \
-  --mask_type_2 ${mask_type_2} \
   --routing_start ${routing_start} \
   --routing_end ${routing_end} \
   --router_type ${router_type} \
-  --temperature ${temperature} \
-  --use_supervision ${use_supervision} \
-  --layer_super ${layer_super} \
-  --margin ${margin} \
 
   

@@ -15,8 +15,7 @@ class CustomizedEncoder(PreTrainedModel):
         super().__init__(config)
         self.config = config
         self.attn_type = config.mask_type
-        self.attn_type_2 = config.mask_type_2 \
-            if config.mask_type_2 is not None else config.mask_type
+        self.attn_type_2 = config.mask_type
         self.rout_start = config.routing_start
         self.rout_end = config.routing_end
         self.router_type = config.router_type

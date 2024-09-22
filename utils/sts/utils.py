@@ -1,14 +1,11 @@
 import torch
 from torch import nn
-from torch.nn.functional import cosine_similarity, sigmoid
-from transformers import TrainerCallback
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from typing import Union, Tuple, Optional
+from typing import Tuple, Optional
 from dataclasses import dataclass
 from transformers.utils import ModelOutput
-import math
 
 # Pooler class. Copied and adapted from SimCSE code
 class Pooler(nn.Module):
@@ -56,27 +53,12 @@ class EncoderOutput(ModelOutput):
     logits: torch.FloatTensor = None
 
 @dataclass
-class CrossConditionEncoderOutput(ModelOutput):
-    loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    token_scores: Optional[Tuple[torch.FloatTensor, ...]] = None
-
-
-@dataclass
-class BiConditionEncoderOutput(ModelOutput):
+class ConditionEncoderOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
     token_scores: Optional[Tuple[torch.FloatTensor, ...]] = None
     token_scores_2: Optional[Tuple[torch.FloatTensor, ...]] = None
     
-
-@dataclass
-class TriConditionEncoderOutput(ModelOutput):
-    loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    token_scores: Optional[Tuple[torch.FloatTensor, ...]] = None
-    token_scores_2: Optional[Tuple[torch.FloatTensor, ...]] = None
-
 @dataclass
 class MyEncoderOutput(ModelOutput):
     last_hidden_state: torch.FloatTensor = None
@@ -92,14 +74,6 @@ class MyModelOutput(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     token_scores: Optional[Tuple[torch.FloatTensor, ...]] = None
-
-
-@dataclass
-class MyExtractOutput(ModelOutput):
-    last_hidden_state: torch.FloatTensor = None
-    pooler_output: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-
 
 class QuadrupletLoss:
     def __init__(self, distance_function, margin=1.0):
@@ -152,9 +126,7 @@ class RankingLoss:
             positive_indices = label.nonzero(as_tuple=True)
             negative_indices = (label == 0).nonzero(as_tuple=True)
 
-            # 获取监督信号为1的token的注意力分数
             positive_score = token_score[positive_indices]
-            # 获取监督信号为0的token的注意力分数
             negative_score = token_score[negative_indices]
 
             # 计算差异
@@ -162,6 +134,6 @@ class RankingLoss:
             loss = torch.clamp(differences + self.margin, min=0)
             total_loss += torch.mean(loss)
         if valid_batch == 0:
-            return 0 #torch.tensor(0.0, dtype=token_scores.dtype, device=token_scores.device)
+            return torch.tensor(0.0, dtype=token_scores.dtype, device=token_scores.device)
         return total_loss / valid_batch
     

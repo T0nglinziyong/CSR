@@ -24,9 +24,9 @@ from transformers import default_data_collator, set_seed
 from transformers.trainer_utils import get_last_checkpoint
 
 from utils.progress_logger import LogCallback
-from utils.sts.dataset_preprocessing import get_preprocessing_function, get_add_supervision_function_
+from utils.triplet_trainer import TripletTrainer
+from utils.sts.dataset_preprocessing import get_preprocessing_function
 from utils.sts.modeling_utils import DataCollatorWithPadding, get_model
-from utils.sts.triplet_trainer import TripletTrainer
 from utils.visualize_attention import visual_score
 
 import pandas as pd
@@ -44,20 +44,13 @@ logger = logging.getLogger(__name__)
 test_predict_file = "test_prediction.json"
 contrastive_objectives = {"triplet", "triplet_mse", "info", "info_mse"}
 objective_set = contrastive_objectives.union({"mse"})
+os.environ["WANDB_DISABLED"] = "true"
 
 sentence1_key, sentence2_key, condition_key, similarity_key = (
     "sentence1",
     "sentence2",
     "condition",
     "label",
-)
-
-train_supervised_file = "data/supervision/gpt_prompt_train.json"
-eval_supervised_file = "data/supervision/gpt_prompt_eval.json"
-sentence1_keyword, sentence2_keyword, condition_keyword = (
-    "sentence1_keyword",
-    "sentence2_keyword",
-    "condition_keyword",
 )
 
 train_key, eval_key, test_key = (
@@ -92,23 +85,12 @@ class TrainingArguments(HFTrainingArguments):
         },
     )
 
-    
-    num_show_examples: int = field(default=8)
-    load_best_model_at_end: bool = field(default=True)
-    metric_for_best_model: Optional[str] = field(default="eval_spearmanr")
-    greater_is_better: bool = field(default=True)
-
-
-    report_to: Optional[str] = field(default="wandb")
-    wandb_mode: Optional[str] = field(default="online")
-
-    project_name: Optional[str] = field(default="c-sts")
-    entity_name: Optional[str] = field(default=None)
-    run_name: Optional[str] = field(default="tem")
-    group_name: Optional[str] = field(default="baseline")
-
-    logging_steps: int = field(default=10,)
-
+    num_show_examples: Optional[int] = field(
+        default=8,
+        metadata={
+            "help": "The final display of the number of samples."
+        }
+    )
 
 
 @dataclass
@@ -332,40 +314,6 @@ class ModelArguments:
         }
     )
 
-    mask_type_2: Optional[int] = field(
-        default=None,
-        metadata={
-            "help": "Attention type for router model \
-            Option: 0-6. Function is same as mask_type \
-            None: use mask_type same as base model"
-        }
-    )
-
-    use_condition: Optional[str] = field(
-        default="True",
-        metadata={
-            "help": "use condition type: Options:\
-            1) True: Do attention product.\
-            2) False: Do n-to-1 linear .\
-            3) None: return  1/ word_count "
-        },
-    )
-
-    temperature: Optional[float] = field(default=1.0)
-
-    layer_super: Optional[int] = field(default=-1, )
-
-    margin: Optional[float] = field(
-        default=0.1, metadata={"help": "The margin of Ranking Loss(if used)."}
-    )
-
-    def __post_init__(self):
-        assert self.temperature > 0
-        self.my_encoder_type = 1
-        if self.routing_start != self.routing_end and self.encoding_type == "tri_encoder":
-            self.encoding_type = "bi_encoder"
-            self.my_encoder_type = 2
-
 
 def get_parser():
     parser = HfArgumentParser(
@@ -412,11 +360,10 @@ def load_files(file_names, filter_function=None, process_function=None, keyword=
         return None
     elif isinstance(file_names, str):
         if os.path.isdir(file_names):
-            # 获取文件夹中所有的项（文件和子目录）
             items = os.listdir(file_names)
-            # 过滤掉子目录，只保留文件
+
             file_names = [item for item in items if os.path.isfile(os.path.join(file_names, item) and 
-                                                               (keyword is None or keyword in item))]
+                                            (keyword is None or keyword in item or item in keyword))]
         elif os.path.isfile(file_names):
             file_names = [file_names]
 
@@ -425,8 +372,6 @@ def load_files(file_names, filter_function=None, process_function=None, keyword=
     for file_name in file_names:
         df = read_file(file_name)
 
-        # to_dict方法将DataFrame转换为一个字典，其中每个键对应DataFrame中的一行，每个值是包含该行数据的字典。
-        # 参数orient='records'指定了字典的格式，意味着字典的键将是行标签，而值是与这些行对应的记录列表
         data_dict = df.to_dict(orient='records') 
         datasets.append(Dataset.from_list(data_dict))
     
@@ -445,7 +390,6 @@ def load_files(file_names, filter_function=None, process_function=None, keyword=
 
 
 def load_dataset(data_args, training_args, filter_function=None, process_function=None):
-    # 加载数据集
     train_dataset = load_files(data_args.train_file, filter_function, process_function, train_key)
     eval_dataset = load_files(data_args.validation_file, filter_function, process_function, eval_key)
     predict_dataset = load_files(data_args.test_file, filter_function, process_function, test_key)
@@ -502,7 +446,6 @@ def get_model_and_tokenizer(model_args):
             "model_revision": model_args.model_revision,
             "cache_dir": model_args.cache_dir,
             "model_name_or_path": model_args.model_name_or_path,
-            "my_encoder_type": model_args.my_encoder_type,
             "objective": model_args.objective,
             "pooler_type": model_args.pooler_type,
             "transform": model_args.transform,
@@ -511,10 +454,6 @@ def get_model_and_tokenizer(model_args):
             "routing_end":model_args.routing_end,
             "router_type":model_args.router_type,
             "mask_type":model_args.mask_type,
-            "mask_type_2":model_args.mask_type_2,
-            "temperature":model_args.temperature,
-            "layer_score":model_args.layer_super,
-            "margin":model_args.margin,
         }
     )
     model = model_cls(config=config)
@@ -567,45 +506,26 @@ def show_examples_from_my_encoder(trainer, train_dataset, tokenizer, num_example
     split_posi = len(predictions[-1][0]) // 2 + 1
     fig_path = path + "/figures/"
 
-    for id, input_ids_1, input_ids_2, input_ids_3, label,\
-        predict, attention_1, attention_2  in \
-        zip(range(len(samples['input_ids'])), samples["input_ids"], samples["input_ids_2"], samples["input_ids_3"], samples['labels'],
-                predictions[0], predictions[-2], predictions[-1], 
-                ): 
+    for id, input_ids_1, input_ids_2, input_ids_3, label, predict, attention_1, attention_2  in \
+        zip(range(num_example), samples["input_ids"], samples["input_ids_2"], samples["input_ids_3"],
+            samples['labels'], predictions[0], predictions[-2], predictions[-1]): 
         fig_name_1 = f'token_score_{2*id}.png'
         fig_name_2 = f'token_score_{2*id+1}.png'
-        visual_score(input_ids_3,input_ids_1, attention_1, split_posi, tokenizer, fig_path, fig_name_1, label, predict)
-        visual_score(input_ids_3,input_ids_2, attention_2, split_posi, tokenizer, fig_path, fig_name_2, label, predict)
-        wandb.log({fig_name_1: wandb.Image(os.path.join(fig_path, fig_name_1), caption=fig_name_1)})
-        wandb.log({fig_name_2: wandb.Image(os.path.join(fig_path, fig_name_2), caption=fig_name_2)})
-        print(f'------------------sample {id}--------------------')
-        try:
-            print(f"condition: {tokenizer.decode(input_ids_3)}        key: {samples[id]['condition_key']}")
-            print(f"sentence1: {tokenizer.decode(input_ids_1)}")
-            print(f"sentence2: {tokenizer.decode(input_ids_2)}")
-            print(f"key1: {samples[id]['sentence1_key']}")
-            print(f"key2: {samples[id]['sentence2_key']}")
 
-            print(f"label: {label}, prediction: {predict}")
-        except:
-            print(f"condition: {tokenizer.decode(input_ids_3)}")
-            print(f"sentence1: {tokenizer.decode(input_ids_1)}")
-            print(f"sentence2: {tokenizer.decode(input_ids_2)}")
-            print(f"label: {label}, prediction: {predict}")
+        visual_score(input_ids_3, input_ids_1, attention_1, split_posi, tokenizer, fig_path, fig_name_1, label, predict)
+        visual_score(input_ids_3, input_ids_2, attention_2, split_posi, tokenizer, fig_path, fig_name_2, label, predict)
+        
+        print(f'------------------sample {id}--------------------')
+        
+        print(f"condition: {tokenizer.decode(input_ids_3)}")
+        print(f"sentence1: {tokenizer.decode(input_ids_1)}")
+        print(f"sentence2: {tokenizer.decode(input_ids_2)}")
+        print(f"label: {label}, prediction: {predict}")
             
 
 
 def main():
     model_args, data_args, training_args = get_parser()
-
-    wandb.init(
-        project=training_args.project_name, 
-        entity=training_args.entity_name, 
-        name=training_args.run_name, 
-        group=training_args.group_name,
-        mode=training_args.wandb_mode,
-        notes=None,
-    )
 
     model, tokenizer = get_model_and_tokenizer(model_args)
     
@@ -662,26 +582,9 @@ def main():
         scale=(data_args.min_similarity, data_args.max_similarity)
         if model_args.objective in objective_set
         else None,
-        condition_only=data_args.condition_only,
-        sentences_only=data_args.sentences_only,
     )
 
     train_dataset, eval_dataset, predict_dataset = load_dataset(data_args, training_args, None, process_function=preprocess_function)
-    eval_dataset_2 = None #load_files("", process_function=preprocess_function)
-
-    if data_args.use_supervision:
-        get_add_supervision_function = get_add_supervision_function_(
-            tokenizer,
-            sentence1_key,
-            sentence2_key,
-            condition_key,
-            sentence1_keyword,
-            sentence2_keyword,
-            condition_keyword,
-        )
-        train_dataset = train_dataset.map(get_add_supervision_function(train_supervised_file) ,batched=False, with_indices=True)
-        eval_dataset = eval_dataset.map(get_add_supervision_function(eval_supervised_file) ,batched=False, with_indices=True)
-
 
     # Log a few random samples from the training set:
     if training_args.do_train:
@@ -740,7 +643,8 @@ def main():
             trainer.save_metrics("train", combined)
     
     if training_args.num_show_examples > 0 and model_args.encoding_type == "bi_encoder":
-        show_examples_from_my_encoder(trainer, eval_dataset, tokenizer, training_args.num_show_examples, 
+        show_examples_from_my_encoder(trainer, eval_dataset, tokenizer, 
+                                      training_args.num_show_examples, 
                                       training_args.output_dir, training_args.seed) 
     
     if training_args.do_predict:

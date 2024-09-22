@@ -10,12 +10,7 @@ export ROUT_START=21 # router开始的层数
 export ROUT_END=24 # router结束的层数
 export ROUTER_TYPE=3 
 export MASK_TYPE=0
-export MASK_TYPE_2=4
 export SEED=45
-
-export USE_SUPER=False # 使用gpt的监督信号
-export LAYER_SUPER=-1 # 监督的层数
-export MARGIN=0.1 # loss函数的margin
 
 export POOLER_TYPE=cls
 export SHOW_EXAMPLE=18
