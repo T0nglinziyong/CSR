@@ -1,4 +1,4 @@
-![image](https://github.com/user-attachments/assets/ea8add18-9c46-4f12-93dc-c9d3ef3abd25)# Varying Sentence Representations via Condition-Specified Routers
+# Varying Sentence Representations via Condition-Specified Routers
 
 ## Updates
 
@@ -43,11 +43,12 @@ python make_test_submission.py
 
 ***C-STS***
 
-<img src='img/longchat-lines.png'>
+![image](https://github.com/user-attachments/assets/ea8add18-9c46-4f12-93dc-c9d3ef3abd25)
 
 ***KGC***
 
-<img src='img/lost-in-the-middle.png'>
+![image](https://github.com/user-attachments/assets/eebbe7a1-50e0-4819-8ee9-142d3e652a2c)
+
 
 ## Acknowledgement
 
