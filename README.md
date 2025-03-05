@@ -58,12 +58,11 @@ Data / Code:
 ## 📜 Citation
 
 ```tex
-@inproceedings{
-      anonymous2024varying,
-      title={Varying Sentence Representations via Condition-Specified Routers},
-      author={Anonymous},
-      booktitle={The 2024 Conference on Empirical Methods in Natural Language Processing},
-      year={2024},
-      url={https://openreview.net/forum?id=q7wTPNTLDR}
+@inproceedings{lin2024varying,
+  title={Varying Sentence Representations via Condition-Specified Routers},
+  author={Lin, Ziyong and Wang, Quansen and Jia, Zixia and Zheng, Zilong},
+  booktitle={Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing},
+  pages={17390--17401},
+  year={2024}
 }
 ```
