@@ -105,18 +105,26 @@ class TriEncoderForClassification_(PreTrainedModel):
         conditions = self.backbone(
             input_ids=input_ids_3,
             attention_mask=attention_mask_3,
-            output_attentions=True,
-            output_hidden_states=True
-            ).hidden_states
+            token_type_ids=token_type_ids_3,
+            position_ids=position_ids_3,
+            head_mask=head_mask_3,
+            inputs_embeds=inputs_embeds_3,
+        ).last_hidden_state
         
         attention_mask = torch.cat([attention_mask_3.repeat(2, 1), attention_mask], dim=1)
+        attention_mask_ = self.manip_attention_mask(attention_mask, seq_length)
+        conditions = conditions.repeat(2, 1, 1)
 
         outputs = self.backbone(
             input_ids=input_ids,
-            attention_mask=self.manip_attention_mask(attention_mask, seq_length),
-            past_key_values=[condition.repeat(2, 1, 1) for condition in conditions[:-1]],
+            attention_mask=attention_mask_,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            conditions=conditions,
             output_token_scores=True
-            )
+        )
         
         features = self.pooler(attention_mask, outputs)
         features_1, features_2 = torch.split(features, bsz, dim=0)
@@ -161,23 +169,9 @@ class TriEncoderForClassification_(PreTrainedModel):
         )
     
     def manip_attention_mask(self, mask, qlen=None):
-        bsz, slen = mask.shape
+        slen = mask.shape[1]
         qlen = slen if qlen is None else qlen
-        # split_pos: condtion cls ; split_pos -1: sep token
-        split_posi = slen // 2 + 1
 
         mask_expanded = mask.unsqueeze(1)
         mask_3d = mask_expanded.repeat(1, qlen, 1)
-        mask_3d[:, 1:, :split_posi] = 0
-        return mask_3d#self.get_extended_attention_mask(mask_3d, (bsz, qlen))
-
-
-def init_model_config(model, config):
-    model.attn_type = config.mask_type
-
-    model.rout_start = config.routing_start
-    model.rout_end = config.routing_end
-    model.router_type = config.router_type
-
-    for i, layer in enumerate(model.encoder):
-        layer.use_router = (i >= model.rout_start) and (i < model.rout_end) 
+        return mask_3d

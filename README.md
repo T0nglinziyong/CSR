@@ -58,12 +58,12 @@ Data / Code:
 ## 📜 Citation
 
 ```tex
-@misc{deshpande2023csts,
-      title={CSTS: Conditional Semantic Textual Similarity}, 
-      author={Ameet Deshpande and Carlos E. Jimenez and Howard Chen and Vishvak Murahari and Victoria Graf and Tanmay Rajpurohit and Ashwin Kalyan and Danqi Chen and Karthik Narasimhan},
-      year={2023},
-      eprint={2305.15093},
-      archivePrefix={arXiv},
-      primaryClass={cs.CL}
+@inproceedings{
+      anonymous2024varying,
+      title={Varying Sentence Representations via Condition-Specified Routers},
+      author={Anonymous},
+      booktitle={The 2024 Conference on Empirical Methods in Natural Language Processing},
+      year={2024},
+      url={https://openreview.net/forum?id=q7wTPNTLDR}
 }
 ```

@@ -129,7 +129,6 @@ class RankingLoss:
             positive_score = token_score[positive_indices]
             negative_score = token_score[negative_indices]
 
-            # 计算差异
             differences = negative_score.view(-1, 1) - positive_score.view(1, -1)
             loss = torch.clamp(differences + self.margin, min=0)
             total_loss += torch.mean(loss)

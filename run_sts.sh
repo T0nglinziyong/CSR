@@ -62,7 +62,7 @@ python run_sts.py \
   --data_seed ${seed} \
   --fp16 True \
   --log_time_interval 15 \
-  --overwrite_output_dir False \
+  --overwrite_output_dir True \
   --num_show_examples 8 \
   --load_best_model_at_end True \
   --metric_for_best_model eval_spearmanr \

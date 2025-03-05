@@ -1,13 +1,14 @@
 #!/bin/bash
-export MODEL=princeton-nlp/sup-simcse-roberta-large  #./simcse-base #./diffcse-roberta-base-sts #
+export MODEL=princeton-nlp/sup-simcse-roberta-large
 export ENCODER_TYPE=tri_encoder
 export OBJECTIVE=mse #triplet_mse # classification # 
-export TRIENCODER_HEAD=None
+export TRIENCODER_HEAD=none # hadamard # 
 export NUM_LABELS=1
 
 export TRANSFORM=True
 export ROUT_START=23 # router开始的层数
 export ROUT_END=24 # router结束的层数
+export ROUTER_TYPE=3
 export MASK_TYPE=4
 export SEED=45
 

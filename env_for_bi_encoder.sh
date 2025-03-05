@@ -1,8 +1,8 @@
 #!/bin/bash
-export MODEL=princeton-nlp/sup-simcse-roberta-large  #./simcse-base #./diffcse-roberta-base-sts #
+export MODEL=princeton-nlp/sup-simcse-roberta-large
 export ENCODER_TYPE=bi_encoder
 export OBJECTIVE=mse #triplet_mse # classification # # mse
-export TRIENCODER_HEAD=None # hadamard
+export TRIENCODER_HEAD=none # hadamard
 export NUM_LABELS=1
 
 export TRANSFORM=False

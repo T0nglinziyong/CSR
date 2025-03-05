@@ -86,9 +86,9 @@ class CustomizedEncoderV2(PreTrainedModel):
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         embedding_output = self.embeddings(
-            input_ids=input_ids, #word_embeddings维度是(50265, 1024)
-            position_ids=position_ids, # position_embeddings维度是(512, 1024) 输入为None
-            token_type_ids=token_type_ids, # token_type_embeddings的维度是(1, 1024) 输入为全0
+            input_ids=input_ids,
+            position_ids=position_ids,
+            token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
         )
 
@@ -97,10 +97,10 @@ class CustomizedEncoderV2(PreTrainedModel):
         
     def self_attention(
         self, attention,
-        hidden_states: torch.Tensor, # 输入的隐藏状态，即模型的输入特征。
-        attention_mask: Optional[torch.FloatTensor] = None, # 形状为 [batch_size, sequence_length]，其中非零值表示需要注意的位置。
-        head_mask: Optional[torch.FloatTensor] = None, # 用于掩盖（mask）某些注意力头，使模型在计算注意力时忽略这些头。形状为 [num_attention_heads, num_attention_heads]。
-        encoder_hidden_states: Optional[torch.FloatTensor] = None, # 如果是用于跨注意力模块，这是来自编码器的注意力掩码。
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None, 
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
@@ -161,7 +161,6 @@ class CustomizedEncoderV2(PreTrainedModel):
         context_layer = torch.matmul(attention_probs, value_layer)
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        # PyTorch中的某些操作，如转置、视图操作（例如view()）、某些索引操作等，可能会导致张量不再是连续的，这时可以使用.contiguous()方法将其转换为连续的张量
         new_context_layer_shape = context_layer.size()[:-2] + (attention.all_head_size,)
         context_layer = context_layer.view(new_context_layer_shape)
 
